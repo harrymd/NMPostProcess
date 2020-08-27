@@ -18,6 +18,7 @@
   * [How to acknowledge this code](#how-to-acknowledge-this-code)
 
 <a style="color: #000000" name="dependencies"/>
+
 ## Dependencies
   
 It is necessary to install [*Python*](https://www.python.org/) and the following *Python* libraries:
@@ -30,6 +31,7 @@ It is necessary to install [*Python*](https://www.python.org/) and the following
 <a href="#top">Back to top</a>
 
 <a style="color: #000000" name="how-to-install-the-code"/>
+
 ## How to install the code
 
 Make a copy of this repository. It should then be ready to use.
@@ -37,6 +39,7 @@ Make a copy of this repository. It should then be ready to use.
 <a href="#top">Back to top</a>
 
 <a style="color: #000000" name="files-required-for-post-processing"/>
+
 ## Files required for post-processing
 
 ### The *PlanetaryModels* input files
@@ -90,6 +93,7 @@ quick
 <a href="#top">Back to top</a>
 
 <a style="color: #000000" name="how-to-run-a-quick-projection"/>
+
 ## How to run a 'quick projection'
 
 To select 'quick projection', set the third line `input_NMPostProcess.txt` to `quick`. The remaining two lines should be
@@ -188,6 +192,7 @@ This shows the VSH coefficients (radial $U_{lm}$, consoidal $V_{lm}$ and toroida
 <a href="#top">Back to top</a>
 
 <a style="color: #000000" name="how-to-run-automatic-mode-identification"/>
+
 ## How to run automatic mode identification
 
 The dominant $\ell$-value and mode type (spheroidal or toroidal) can be determined automatically from the power distribution VSH coefficients. To do this, process each mode as described above using `process.py`. Then run
@@ -237,6 +242,7 @@ The mode clustering information can be helpful for identifying numerical errors 
 <a href="#top">Back to top</a>
 
 <a style="color: #000000" name="how-to-run-a-full-projection"/>
+
 ## How to run a 'full projection'
 
 'Full projection' calculates VSH coefficients on spherical surfaces with various radii from the centre of the planet to the surface, instead of the one radius used in quick projection. This means that full projection is slower, but it provides a full description of the mode displacement field throughout the planet. This can give more robust mode identifications.
@@ -246,6 +252,7 @@ Full projection has been implemented offline, but the code is not currently read
 <a href="#top">Back to top</a>
 
 <a style="color: #000000" name="how-to-do-projections-in-parallel"/>
+
 ## How to do projections in parallel
 
 The calculation of the VSH coefficients of one mode is independent of the calculation of the coefficients of any other mode. Therefore, it is straightforward to process all of the modes in parallel. This speeds up the calculation, which is especially useful for 'full projection'.
@@ -257,6 +264,7 @@ Parallel processing is often more effective if you have access to a cluster with
 <a href="#top">Back to top</a>
 
 <a style="color: #000000" name="description-of-the-processing-steps"/>
+
 ## Description of the processing steps
 
 Vector spherical harmonics (VSHs) are the natural basis to describe the modes of spherically-symmetrical planets (see Dahlen and Tromp, 1998, chapter 8). They are also a good starting point for non-spherically-symmetric planets if the deviations from spherical symmetry are small. The main task of *NMPostProcess* is to project the vector displacement fields (eigenfunctions) of the modes calculated by *NormalModes* into VSHs to allow the modes to be identified. In particular, from the VSH expansion it is trivial to separate toroidal and spheroidal modes, and determine the $\ell$-value of the mode. For these tasks it is usually sufficient to use the VSH expansion onto a single spherical surface. This is called 'quick projection'. Sometimes it is helpful to calculate the VSH expansion at various radial distances spanning the interior of the planet; we call this 'full projection'.
@@ -284,6 +292,7 @@ Full projection uses the same processing steps as quick projection (steps 4–7)
 <a href="#top">Back to top</a>
 
 <a style="color: #000000" name="known-issues"/>
+
 ## Known issues
 
 ### Contour maps with *Cartopy*
@@ -299,6 +308,7 @@ and other times it will fail to draw some contour levels without raising an erro
 <a href="#top">Back to top</a>
 
 <a style="color: #000000" name="contributors-and-version-history"/>
+
 ## Contributors and version history
 
 * Version 1: Created by [Harry Matchette-Downes](http://web.mit.edu/hrmd/www/home.html). Includes 'quick' processing, and plotting of maps, spectra and mode diagrams.
@@ -313,6 +323,7 @@ We intend to add the following features:
 <a href="#top">Back to top</a>
 
 <a style="color: #000000" name="how-to-contribute"/>
+
 ## How to contribute
 
 Please feel free to contribute in the form of bug reports, bug fixes, feature requests, or new code.
@@ -320,6 +331,7 @@ Please feel free to contribute in the form of bug reports, bug fixes, feature re
 <a href="#top">Back to top</a>
 
 <a style="color: #000000" name="how-to-acknowledge-this-code"/>
+
 ## How to acknowledge this code
 
 If you use this code as part of published work, please include an acknowledgement such as 'the *NormalModes* output was projected into vector spherical harmonics using the *NMPostProcess* software (https://github.com/harrymd/NMPostProcess)'.
