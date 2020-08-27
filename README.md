@@ -181,6 +181,7 @@ For the same example as above, if we change the plot input file to
 spectral
 15
 png
+90 # Note that last line is ignored for spectral plots.
 ```
 
 we get a spectral plot:
