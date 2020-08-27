@@ -2,4 +2,4 @@
 /Users/hrmd_work/Documents/research/stoneley/output/NormalModes/prem_0439.4_2.00_1_00.10_01.00_1/
 quick
 10
-23
+all

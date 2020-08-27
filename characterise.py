@@ -1,7 +1,17 @@
+'''
+NMPostProcess/characterise.py
+Functions for characterising and identifying modes based on their vector spherical harmonic expansions.
+'''
+
+# Import modules. -------------------------------------------------------------
+
+# Import standard modules.
 import os
 
+# Import third-part modules.
 import numpy as np
 
+# Import local modules.
 from common import get_list_of_modes_from_output_files, load_vsh_coefficients, make_l_and_m_lists
 
 # Characterisation of modes based on their VSH coefficients. ------------------
@@ -11,17 +21,15 @@ def calculate_power_distribution(Ulm, Vlm, Wlm, l_list, print_ = True):
 
     Input:
 
-    Ulm, Vlm, Wlm   The complex vector spherical harmonic coefficients of a surface vector field.
-    l_list          A list of l-values corresponding the each of the coefficients.
-    print_          If True, print detailed information.
+    Ulm, Vlm, Wlm, l_list
+        See 'Definitions of variables' in NMPostProcess/process.py.
+    print_
+        If True, print detailed information.
 
     Output:
 
-    EU  The fraction of 'energy' in the radial component.
-    EV  The fraction of 'energy' in the poloidal component.
-    EW  The fraction of 'energy' in the toroidal component.
-    E   The total 'energy'.
-    E_of_l  A list of the 'energy' contained in each value of angular order.
+    EU, EV, EW, E, E_of_l
+        See 'Definitions of variables' in NMPostProcess/process.py.
     '''
 
     # Calculate 'power' in each component (radial, consoidal, toroidal) and total 'power'.
@@ -41,6 +49,7 @@ def calculate_power_distribution(Ulm, Vlm, Wlm, l_list, print_ = True):
                         +   np.sum(np.abs(Vlm[i])**2.0)
                         +   np.sum(np.abs(Wlm[i])**2.0))
     
+    # Print a summary.
     if print_:
     
         print('Power in components:\n{:5.1f} % spheroidal ({:5.1f} % radial, {:5.1f} % consoidal)\n{:5.1f} % toroidal'.format(((EU + EV)/E)*100.0, (EU/E)*100.0, (EV/E)*100.0, (EW/E)*100.0))
@@ -66,7 +75,7 @@ def characterise_all_modes_quick(dir_NM):
     for i, i_mode in enumerate(i_mode_list):
 
         # Load the complex VSH coefficients.
-        Ulm, Vlm, Wlm, scale, r_max_i, region_max_i = load_vsh_coefficients(dir_NM, i_mode)
+        Ulm, Vlm, Wlm, scale, r_max_i, i_region_max_i = load_vsh_coefficients(dir_NM, i_mode)
 
         if first_iteration:
 
@@ -81,30 +90,30 @@ def characterise_all_modes_quick(dir_NM):
             E_UVW = np.zeros((3, n_modes))
             E_of_l = np.zeros((l_max + 1, n_modes))
             r_max = np.zeros(n_modes)
-            region_max = np.zeros(n_modes, dtype = np.int)
+            i_region_max = np.zeros(n_modes, dtype = np.int)
 
             first_iteration = False
 
         # Calculate the power distribution.
-        EU, EV, EW, E, E_of_l_i = calculate_power_distribution(Ulm, Vlm, Wlm, l, print_ = False)
+        EU_i, EV_i, EW_i, E_i, E_of_l_i = calculate_power_distribution(Ulm, Vlm, Wlm, l, print_ = False)
         
         # Normalise by the sum.
-        EU          = EU/E
-        EV          = EV/E
-        EW          = EW/E
-        E_of_l_i    = E_of_l_i/E
+        EU_i        = EU_i/E_i
+        EV_i        = EV_i/E_i
+        EW_i        = EW_i/E_i
+        E_of_l_i    = E_of_l_i/E_i
 
         # Store.
-        E_UVW[0, i]     = EU
-        E_UVW[1, i]     = EV
-        E_UVW[2, i]     = EW
+        E_UVW[0, i]     = EU_i
+        E_UVW[1, i]     = EV_i
+        E_UVW[2, i]     = EW_i
         E_of_l[:, i]    = E_of_l_i
         # 
         r_max[i] = r_max_i
-        region_max[i] = region_max_i
+        i_region_max[i] = i_region_max_i
 
     # Save mode characterisation information.
-    array_out = np.array([*E_UVW, *E_of_l, r_max, region_max])
+    array_out = np.array([*E_UVW, *E_of_l, r_max, i_region_max])
     path_out = os.path.join(dir_NM, 'processed', 'characterisation_quick.npy')
     print('Saving mode characterisation information to {:}'.format(path_out))
     np.save(path_out, array_out)
@@ -116,7 +125,7 @@ def characterise_all_modes_quick(dir_NM):
     type_ = np.zeros(n_modes, dtype = np.int)
     for i in range(n_modes):
 
-        shell[i] = region_max[i]//3
+        shell[i] = i_region_max[i]//3
          
         # Find dominant l-value.
         l[i] = np.argmax(E_of_l[:, i])

@@ -1,51 +1,27 @@
 '''
+NMPostProcess/process.py
+Functions for processing NormalModes output with vector spherical harmonics (VSHs).
+For usage information, see README.md.
+
 Definitions of variables:
 
-dir_PM          PM stands for PlanetaryModels. The path of the directory containing the model input files.
-dir_NM          NM standard for NormalModes. The path of the directory containing the NormalModes input and output files.
-dir_processed   The directory (within dir_NM) which processed output is written to.
-i_mode          The mode number (for a given NormalModes run, the mode number ranges from 1 to n_modes).
-n_modes         The number of modes in the frequency range calculated by NM.
-n_nodes         The number of nodes in the mesh.
-n_samples       The number of points at which the eigenvector is specified. 
-                Note: The eigenfunction is a vector displacement. It has three components which are specified at each node. At the fluid-solid boundary nodes, the displacement is specified on both the fluid side and the solid side of the boundary. Therefore if there are n_s solid nodes, n_f fluid nodes and n_sf solid-fluid boundary nodes, then the number of samples of the eigenvector will be
-                    n_samples = n_s + n_f + 2*n_sf
-                which is greater (by n_sf) than the number of nodes,
-                    n_nodes = n_s + n_f + n_sf
-node_idxs       (n_samples) A list of indices which map the samples of the displacement to the node at which the sample is taken. The indices of the fluid-solid boundary nodes occur twice, because the displacement is specified on both sides of the boundary. For example, to find the coordinates at which the j_th sample of the eigenvector applies, node = nodes[node_idxs[j]] (where nodes is the list of nodes, with shape n_nodes, as output by the function process.read_mesh().)
-node_attbs      (n_samples) A list of integer attributes for each sample of the displacement:
-                    0   Displacement in solid (interior or free surface).
-                    1   Displacement in fluid (interior).
-                    2   Displacement in solid (at solid-fluid interface).
-                    6   Displacement in fluid (at solid-fluid interface).
-                    For second-order elements, the corresponding integers are 3, 4, 5, and 7, but these are not used.
-eigvecs         (3, n_samples) The displacement of the eigenfunction, listed at each sample point.
-nodes           (3, n_nodes) The coordinates of the computational nodes.
-freq            The frequency of a given mode (mHz).
 
-These variables are only used for finding the NormalModes output files:
-
-name_base       The prefix of the NormalModes output files (usually 'mod.1'). 
-pOrder          The polynomial order of the finite elements (1 or 2).
-use_G           The gravity switch (0: no gravity) or (1: gravity).
-f_min, f_max    The frequency limits of the run.
-n_processes     The product of n_nodes and n_tasks_per_node. The total number of computational processes used.
-r_surface       The outer radius of the planet.
-r_discons       A list of the radii of solid-fluid discontinuities within the planet (will be set to None if there are none).
-state_outer     A string describing the state of the inner core of the planet, either 'fluid' or 'solid'. Set to None if the planet has no solid-fluid discontinuities.
-boundary_tol    A tolerance for floating point checks to determine if a point is on a boundary. This is only used for points at the free surface, which are not assigned a different node attribute by the NormalModes code (unlike fluid-solid boundary nodes).
 '''
 
+# Import modules --------------------------------------------------------------
+# Import core modules.
 from functools import partial
 from glob import glob
 import multiprocessing
 import os
 
+# Import third-party modules
 import numpy as np
 from scipy.interpolate import LinearNDInterpolator 
 import shtns
 import ssrfpy
 
+# Import local modules.
 from common import get_list_of_modes_from_output_files, mkdir_if_not_exist, read_eigenvalues
 
 # Pre-processing steps (only performed once for a given run). -----------------
@@ -55,10 +31,12 @@ def write_eigenvalues(file_std_out, file_eigval_list = None):
 
     Input
 
-    file_std_out        The path to the standard output file.
-    file_eigval_list    (Optional.) The path of the output eigenvalue list file.
+    file_std_out, file_eigval_list (optional)
+        See 'Definitions of variables'.
 
-    No output.
+    Returns
+
+    None
     '''
 
     # Skip lines until the relevant section is reached. 
@@ -77,7 +55,7 @@ def write_eigenvalues(file_std_out, file_eigval_list = None):
             raise ValueError('Reached end of file without finding target line')
         
         line = in_id.readline().split()
-        # Create output arrays for mode i_modeber and frequency.
+        # Create output arrays for mode number and frequency.
         i_mode     = []
         freq    = []
         while len(line) == 4:
@@ -87,6 +65,7 @@ def write_eigenvalues(file_std_out, file_eigval_list = None):
             
             line = in_id.readline().split()
             
+    # Write to eigenvalue file (if requested).
     if file_eigval_list is not None:
         
         print('Writing eigenvalue list file {:}'.format(file_eigval_list))
@@ -99,25 +78,48 @@ def write_eigenvalues(file_std_out, file_eigval_list = None):
     return i_mode, freq
 
 def read_discon_file(path_discon_info):
+    '''
+    Reads information about solid-fluid discontinuities.
+
+    Input:
+
+    path_discon_info
+        See 'Definitions of variables'.
+
+    Output:
+
+    r_discons, state_outer
+        See 'Definitions of variables'.
+    '''
 
     with open(path_discon_info, 'r') as in_id:
 
+        # Read lines, remove newline character.
         lines = in_id.readlines()
         lines = [x.strip() for x in lines]
 
+        # First line is state of outer shell.
         state_outer = lines[0]
+
+        # Remaining lines are radii of discontinuities (including surface), starting at the surface.
         r_discons = np.array([float(x) for x in lines[1:]])
 
     return r_discons, state_outer
     
 def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default'):
     '''
-    Output
+    For each region (outer surface, interior, and inner surface of each shell), find the indices of the samples belonging to that region.
 
-    index_list_interior     A list with one item for each region separated by solid-fluid discontinuities. Each item is a list of indices of points the interior (non-interface points) of that region. If the planet has no solid-fluid discontinuities, this list is None. The list starts with the innermost region and moves outwards.
-    index_list_boundaries   A list with two items for each solid-fluid discontinuity and one item at the surface. Each item is a list of indices samples on the interface (either at the inner or outer surface). The list starts with the innermost interface and moves outwards. If the planet has no solid-fluid discontinuities, the list has only one entry (for the free surface).
+    Input:
+
+    See 'Definitions of variables.'
+
+    Output:
+
+    See 'Definitions of variables.'
     '''
     
+    # Get the radius of the surface and the number of discontinuities.
     r_surface = r_discons[0]
     n_discons = len(r_discons)
 
@@ -134,6 +136,7 @@ def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer,
     interior_condition = (((node_attbs == 0) | (node_attbs == 1)) & ~surface_condition)
     j_interior_sample = np.where(interior_condition)[0]
 
+    # Case 1: There are no interior discontinuities.
     if n_discons == 1:
         
         # Find samples inside the object.
@@ -142,6 +145,7 @@ def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer,
         # Find samples on the surface of the object.
         index_lists_boundaries = [j_surface]
 
+    # Case 2: There are some interior discontinuities.
     else:
 
         # Initialise lists.
@@ -190,29 +194,42 @@ def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer,
                 index_lists_boundaries.append(j_discon)
 
     # Merge the lists into a single list.
+    # The list starts with the free surface and then the first interior region.
     index_lists = [index_lists_boundaries[0], index_lists_interior[0]]
     if len(index_lists_interior) > 1:
 
         for i in range(1, len(index_lists_interior)):
 
+            # Between every interior region, there are two boundaries.
             index_lists.append(index_lists_boundaries[2*i - 1])
             index_lists.append(index_lists_boundaries[2*i])
 
+            # The next interior region.
             index_lists.append(index_lists_interior[i])
 
     return index_lists_interior, index_lists_boundaries, index_lists
 
 def get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default'):
     '''
+    Finds the samples of the eigvector which belong to a specified boundary.
+    
+    Input:
+
+    See 'Definitions of variables.'
+
     Output:
 
-    j_allowed   The indices of the samples on the specified interface.
+    condition
+        (n_samples) True for the samples on the boundary, False otherwise. Therefore j_boundary = np.where(condition)[0].
+    j_boundary
+        The indices of the samples which belong to the boundary.
     '''
-
-    r_surface = r_discons[0]
 
     # Case 1: The interface is the outer surface.
     if (i_shell == 0) and is_outer:
+
+        # Find radius of outer surface.
+        r_surface = r_discons[0]
 
         # Set default value of comparison tolerance for boundaries.
         if boundary_tol == 'default':
@@ -227,13 +244,14 @@ def get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_d
     # Case 2: The interface is an internal fluid-solid boundary.
     else:
         
+        # Find the index of the region the sample belongs to.
         if is_outer:
             
-            i_discon = i_shell
+            i_region_discon = i_shell
 
         else:
 
-            i_discon = i_shell + 1
+            i_region_discon = i_shell + 1
 
         # Get discon lists.
         r_discon_midpoints, state_list, n_interior_discons = get_discon_info(r_discons, state_outer)
@@ -243,7 +261,7 @@ def get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_d
             # Find which nodes are close to the specified discontinuity. 
             r_nodes = np.linalg.norm(nodes, axis = 1)
             r_samples = r_nodes[node_idxs]
-            radius_condition = ((r_samples < r_discon_midpoints[i_discon - 1]) & (r_samples > r_discon_midpoints[i_discon]))
+            radius_condition = ((r_samples < r_discon_midpoints[i_region_discon - 1]) & (r_samples > r_discon_midpoints[i_region_discon]))
 
         else:
             
@@ -260,17 +278,17 @@ def get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_d
 
             attb_condition = (node_attbs == 6)
 
+        # Apply the attribute and radius conditions simultaneously.
         condition = (attb_condition & radius_condition)
         
-    j_allowed = np.where(condition)[0]
+    j_boundary = np.where(condition)[0]
 
-    return condition, j_allowed
+    return condition, j_boundary
 
 def pre_process(dir_PM, dir_NM):
     '''
-    Perform some processing steps which only need to be done once. These are:
-    x. Create a directory to store processed output.
-    2. Read the eigenvalues from the standard output log and save them.
+    Perform some processing steps which only need to be done once for a given NormalModes run.
+    See README.md for more information.
     '''
 
     # Create the output directories if they do not exist.
@@ -430,87 +448,19 @@ def read_mesh(dir_PM):
 
     return nodes, tets, tet_means, tet_attrib, neighs
 
-def read_config(path_config):
-    '''
-    Reads the 'global_config' file used by NormalModes.
-
-    Input 
-
-    path_config     The path to the file.
-
-    Output
-
-    See 'Definitions of variables'.
-    '''
-
-    with open(path_config, 'r') as in_id:
-        
-        lines = in_id.readlines()
-        lines = [line.split() for line in lines]
-        use_G = int(lines[0][2]) # 0 or 1.
-        # Skip line 1, which has CGMethod = .TRUE.
-        f_min = float(lines[2][2])
-        f_max = float(lines[3][2])
-        pOrder = int(lines[4][2])
-        # Skip lines 5 and 6, with inputdir and outputdir.
-        basename = lines[7][2]
-
-    return use_G, f_min, f_max, pOrder, basename
-
-def read_sbatch(file_sbatch):
-
-    # Read all the lines of the .sbatch file.
-    with open(file_sbatch, 'r') as in_id:
-
-        lines = in_id.readlines()
-        lines = [line.strip() for line in lines]
-
-    def get_line_starting_with(str_, lines):
-        '''
-        Find the first line in a given list which starts with the given string.
-
-        Input:
-
-        str_    The string to match.
-        lines   The lines to search.
-
-        Output:
-
-        line    The matching line.
-
-        Example:
-
-        get_line_starting_with('cd', ['ab0', 'cd1', 'ef2'])
-        >>> 'cd1'
-        '''
-
-        len_str = len(str_)
-
-        for line in lines:
-
-            if line[0 : len_str] == str_:
-
-                return line
-
-        raise ValueError('Could not find leading string {:} in lines {:}'.format(str_, lines))
-    
-    # Get the prefix of the standard output file.
-    std_out_prefix_line = get_line_starting_with('#SBATCH -o', lines)
-    # Parse the line. Example: LLSVP_%j.txt -> LLSVP_
-    std_out_prefix = std_out_prefix_line.split()[2].split('%')[0]
-    
-    # Get the number of computational nodes.
-    n_comp_nodes_line = get_line_starting_with('#SBATCH --nodes=', lines)
-    n_comp_nodes = int(n_comp_nodes_line.split()[1].split('=')[1])
-
-    # Get the number of processes per computational node.
-    n_tasks_per_node_line = get_line_starting_with('#SBATCH --ntasks-per-node=', lines)
-    n_tasks_per_node = int(n_tasks_per_node_line.split()[1].split('=')[1])
-    
-    return n_comp_nodes, n_tasks_per_node, std_out_prefix
-
 def load_sample_indices_and_attribs(dir_NM):
     '''
+    Read the *_vlist.dat and *_vstat.dat files, and slightly reformat them to help to distinguish between samples on the inner and outer surfaces of discontinuities.
+
+    Input:
+
+    dir_NM
+        See 'Definitions of variables'.
+
+    Output:
+
+    node_idxs, node_attbs
+        See 'Definitions of variables'.
     '''
     
     # Read the vlist file (a list of vertex indices).
@@ -525,13 +475,15 @@ def load_sample_indices_and_attribs(dir_NM):
     path_vstat = glob(path_vstat_regex)[0]
     node_attbs  = np.fromfile(path_vstat, dtype = '<i')
     
+    # Print a vertex attribute summary.
     n_nodes_by_attb = [np.sum(node_attbs == i) for i in range(3)]
-
     print('Vertex attribute summary:')
     for i in range(3):
 
         print('{:2d} {:6d}'.format(i, n_nodes_by_attb[i]))
     
+    # Calculate the number of nodes and the number of samples.
+    # (See 'Definitions of variables' for an explanation.)
     n_nodes = node_idxs.shape[0]
     n_samples = n_nodes_by_attb[0] + n_nodes_by_attb[1] + 2*n_nodes_by_attb[2]
 
@@ -609,7 +561,8 @@ def read_mode(dir_NM, i_mode, path_eigvec_base):
 
     Input:
 
-    dir_PM, dir_NM, i_mode  See 'Definitions of variables'.
+    dir_PM, dir_NM, i_mode
+        See 'Definitions of variables'.
 
     Output:
 
@@ -632,6 +585,19 @@ def read_mode(dir_NM, i_mode, path_eigvec_base):
 
 # Reading NMPostProcess files. ------------------------------------------------
 def read_index_lists(dir_NM):
+    '''
+    Read the index lists file generated by get_indices_of_regions().
+
+    Input:
+
+    dir_NM
+        See 'Definitions of variables'.
+
+    Output:
+
+    index_lists
+        See 'Definitions of variables'.
+    '''
 
     # Find path to index lists file.
     dir_processed = os.path.join(dir_NM, 'processed')
@@ -662,6 +628,20 @@ def read_index_lists(dir_NM):
     return index_lists
 
 def read_info_for_projection(dir_PM, dir_NM):
+    '''
+    Read information about the mesh required for doing projection.
+
+    Input:
+
+    dir_PM, dir_NM
+        See 'Definitions of variables'.
+
+    Returns:
+
+    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists
+        See 'Definitions of variables'.
+    
+    '''
 
     # Read node coordinates.
     dir_processed = os.path.join(dir_NM, 'processed')
@@ -682,7 +662,22 @@ def read_info_for_projection(dir_PM, dir_NM):
     return nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists 
 
 def get_eigvec_path_base(dir_NM):
+    '''
+    Determine the common root path for all of the NM output files.
 
+    Input:
+
+    dir_NM
+        See 'Definitions of variables'.
+
+
+    Output:
+
+    eigvec_path_base
+        See 'Defintions of variables'.
+    '''
+
+    # Look for all files in the output directory ending in *.dat.
     regex_eigvec = '*.dat'
     path_regex_eigvec = os.path.join(dir_NM, regex_eigvec)
     eigvec_path_list = glob(path_regex_eigvec)
@@ -699,6 +694,7 @@ def get_eigvec_path_base(dir_NM):
             i_mode = int(eigvec_path_split[-1])
             eigvec_path_base = '_'.join(eigvec_path_split[:-1])
 
+            # Return the first matching pattern.
             return eigvec_path_base
 
         except ValueError:
@@ -711,6 +707,18 @@ def get_eigvec_path_base(dir_NM):
 def xyz_to_rlonlat(x, y, z):
     '''
     Converts from Cartesian coordinates to radius, longitude and latitude.
+    https://mathworld.wolfram.com/SphericalCoordinates.html
+
+    Input:
+
+    x, y, z
+        The Cartesian coordinates.
+
+    Returns:
+
+    r   Radial coordinate.
+    lon Longitude (radians between -pi and pi).
+    lat Latitude (radians between -pi/2 and pi/2).
     '''
 
     r       = np.sqrt(x**2.0 + y**2.0 + z**2.0)
@@ -724,6 +732,17 @@ def rlonlat_to_xyz(r, lon, lat):
     '''
     Converts from radius, longitude and latitude to Cartesian coordinates.
     https://mathworld.wolfram.com/SphericalCoordinates.html
+
+    Input:
+
+    r   Radial coordinate.
+    lon Longitude (radians).
+    lat Latitude (radians).
+
+    Returns:
+
+    x, y, z
+        The Cartesian coordinates.
     '''
 
     # Theta: Angle downward from z axis.
@@ -741,11 +760,14 @@ def get_discon_info(r_discons, state_outer):
     Constructs useful arrays based on discontinuity information.
 
     Input:
-    r_discons, r_surface    See 'Definitions of variables'.
 
-    Output:
+    r_discons, r_surface
+        See 'Definitions of variables'.
+
+    Returns:
     
-    r_discon_midpoints, state_list  See 'Definitions of variables'.
+    r_discon_midpoints, state_list, n_interior_discons
+        See 'Definitions of variables'.
     '''
     
     r_surface = r_discons[0]
@@ -791,20 +813,20 @@ def get_discon_info(r_discons, state_outer):
 
 def find_r_max(nodes, node_idxs, eigvec, index_lists, r_min = None):
     '''
-    #, x, r_discons, r_min = None):
     For a specified displacement field, find the radius at which the maximum displacement occurs.
 
     Input
 
-    eigvec, node_attbs, node_idxs, nodes, r_surface, r_discons, state_outer, boundary_tol
+    nodes, node_idxs, eigvec, index_lists 
         See 'Definitions of variables'.
-    
     r_min   A minimum radius. Points inside this radius will be ignored. If 'default', the minimum radius will be 10% of the outer radius.
 
     Output
 
-    rj      The radius at which the displacement is maximal. If this occurs on the n_th internal boundary (starting from zero), rj will be 'n_inner' or 'n_outer'. If it occurs on the outer surface, rj will be 'surface'. Otherwise, if the maximum is not on any interface, rj will be a float.
-    S_max   The value of the maximum displacement.
+    r_max, i_region_max
+        See 'Definitions of variables.'
+    S_max
+        The maximum absolute value of displacement.
     '''
 
     # If a minimum radius is specified, discard points inside this radius.
@@ -824,48 +846,54 @@ def find_r_max(nodes, node_idxs, eigvec, index_lists, r_min = None):
     S_max   = S[j]
     i       = node_idxs[j]
     node_i  = nodes[i, :]
-    r_j     = np.linalg.norm(node_i)
+    r_max     = np.linalg.norm(node_i)
     
     # Find which region the maximum-amplitude sample belongs to.
     found = False
-    for region, index_list in enumerate(index_lists):
+    for i_region, index_list in enumerate(index_lists):
 
         if j in index_list:
             
             found = True
-            region_j = region
+            i_region_max = i_region
             break
 
-    return r_j, region_j, S_max
+    return r_max, i_region_max, S_max
 
-def interpolate_eigvec_onto_sphere(r_q, region_q, nodes, node_idxs, eigvec, index_lists, n_lat_grid):
+def interpolate_eigvec_onto_sphere(r_q, i_region_q, nodes, node_idxs, eigvec, index_lists, n_lat_grid):
     '''
-    Interpolates the 3D displacement field onto a regular grid on sphere with a specified radius. The radius can be a number or a discontinuity specifier (e.g. '0_inner' or 'surface').
+    Interpolates the 3D displacement field onto a regular grid on a sphere with a specified radius.  
 
     Input:
 
-    nodes, eigvec, rq   See 'Definitions of variables.'
-    interpolator
+    r_q, i_region_q, nodes, node_idxs, eigvec, eigvec, index_lists, n_lat_grid
+        See 'Definitions of variables.'
+    Note: If i_region_q specifies a discontinuity (case 1), then r_q is ignored.
+
+    Output:
+
+    lon_grid, lat_grid, eigvec_grid
+        See 'Definitions of variables.'
     '''
 
     # Make lists of the regions which are discontinuities and which are interiors.
     n_regions = len(index_lists)
     n_shells = (n_regions + 1)//3
     #
-    i_interior = [3*i + 1 for i in range(n_shells)]
-    i_discon = []
+    #i_region_interior = [3*i + 1 for i in range(n_shells)]
+    i_region_discon = []
     for i in range(n_shells):
 
-        i_discon.append(3*i - 1)
-        i_discon.append(3*i)
+        i_region_discon.append(3*i - 1)
+        i_region_discon.append(3*i)
 
-    i_discon = i_discon[1:]
+    i_region_discon = i_region_discon[1:]
 
-    # Case 1: region_q is a string specifying a discontinuity, e.g. 'surface' or '0_outer'.
-    if region_q in i_discon:
+    # Case 1: The query point is within one of the discontinuities.
+    if i_region_q in i_region_discon:
 
         # Find the points from the given discontinuity.
-        j = index_lists[region_q]
+        j = index_lists[i_region_q]
         eigvec = eigvec[j, :]
         nodes = nodes[node_idxs[j], :]
 
@@ -884,13 +912,13 @@ def interpolate_eigvec_onto_sphere(r_q, region_q, nodes, node_idxs, eigvec, inde
 
         # Interpolate onto a regular grid using ssrfpy.
         # Each component is interpolated separately.
-        Lon_grid, Lat_grid, eigvec_x_grid = ssrfpy.interpolate_regular_grid(lon_nodes, lat_nodes, eigvec[:, 0], **ssrfpy_kwargs)
+        lon_grid, lat_grid, eigvec_x_grid = ssrfpy.interpolate_regular_grid(lon_nodes, lat_nodes, eigvec[:, 0], **ssrfpy_kwargs)
         _, _, eigvec_y_grid = ssrfpy.interpolate_regular_grid(lon_nodes, lat_nodes, eigvec[:, 1], **ssrfpy_kwargs)
         _, _, eigvec_z_grid = ssrfpy.interpolate_regular_grid(lon_nodes, lat_nodes, eigvec[:, 2], **ssrfpy_kwargs)
            
         # Remove extra row added by ssrfpy.
-        Lon_grid        = Lon_grid[:, :-1]
-        Lat_grid        = Lat_grid[:, :-1]
+        lon_grid        = lon_grid[:, :-1]
+        lat_grid        = lat_grid[:, :-1]
         eigvec_x_grid   = eigvec_x_grid[:, :-1]
         eigvec_y_grid   = eigvec_y_grid[:, :-1] 
         eigvec_z_grid   = eigvec_z_grid[:, :-1]
@@ -899,85 +927,43 @@ def interpolate_eigvec_onto_sphere(r_q, region_q, nodes, node_idxs, eigvec, inde
         eigvec_grid = np.array([eigvec_x_grid, eigvec_y_grid, eigvec_z_grid])
         eigvec_grid = np.moveaxis(eigvec_grid, 0, -1)
 
-    # Case 2:
+    # Case 2: The query point is within the interior of one of the shells.
     else:
         
         # Extract the nodes from the interior region and its surrounding discontinuities.
         # The inner region only has one bounding discontinuity.
-        if region_q == (n_regions - 1):
+        if i_region_q == (n_regions - 1):
             
-            i_region_list = [region_q - 1, region_q]
+            i_region_list = [i_region_q - 1, i_region_q]
 
         # Other regions have two bounding discontinuities.
         else:
 
-            i_region_list = [region_q - 1, region_q, region_q + 1]
-
-        j = np.concatenate([index_lists[i] for i in i_region_list])
-
+            i_region_list = [i_region_q - 1, i_region_q, i_region_q + 1]
         #
+        j = np.concatenate([index_lists[i] for i in i_region_list])
         eigvec = eigvec[j, :]
         nodes = nodes[node_idxs[j], :]
 
         # Build a regular grid in longitude and latitude.
         # For consistency with Case 1, we use the grid from ssrfpy.interpolate_regular_grid().
         n_lon_grid = 2*n_lat_grid - 1
-        lon_grid = np.linspace(0.0, 2.0*np.pi, n_lon_grid, endpoint = True)[:-1]
-        lat_grid = np.linspace(-np.pi/2.0, np.pi/2.0, n_lat_grid, endpoint=True)
+        lon_span = np.linspace(0.0, 2.0*np.pi, n_lon_grid, endpoint = True)[:-1]
+        lat_span = np.linspace(-np.pi/2.0, np.pi/2.0, n_lat_grid, endpoint=True)
         #
-        Lon_grid, Lat_grid = np.meshgrid(lon_grid, lat_grid)
+        lon_grid, lat_grid = np.meshgrid(lon_span, lat_span)
 
         # Find the Cartesian coordinates of the lon/lat grid.
-        X_grid, Y_grid, Z_grid = rlonlat_to_xyz(r_q, Lon_grid, Lat_grid)
+        x_grid, y_grid, z_grid = rlonlat_to_xyz(r_q, lon_grid, lat_grid)
         
         # Create a linear interpolation function.
         #if interpolator is None:
         interpolator = LinearNDInterpolator(nodes, eigvec)
            
         # Find the eigenfunction at the grid points using interpolation.
-        eigvec_grid = interpolator((X_grid, Y_grid, Z_grid))
+        eigvec_grid = interpolator((x_grid, y_grid, z_grid))
 
-        ## Create a linear interpolation function.
-        #interpolator = LinearNDInterpolator(nodes, eigvec[:, 0])
-        #eigvec_grid_x = interpolator((X_grid, Y_grid, Z_grid))
-        #interpolator = LinearNDInterpolator(nodes, eigvec[:, 1])
-        #eigvec_grid_y = interpolator((X_grid, Y_grid, Z_grid))
-        #interpolator = LinearNDInterpolator(nodes, eigvec[:, 2])
-        #eigvec_grid_z = interpolator((X_grid, Y_grid, Z_grid))
-        #eigvec_grid = np.array([eigvec_grid_x, eigvec_grid_y, eigvec_grid_z])
-        #eigvec_grid = np.moveaxis(eigvec_grid, 0, -1)
-
-    #abs_eigvec_grid = np.linalg.norm(eigvec_grid, axis = 2)
-
-    #import matplotlib.pyplot as plt
-    #
-    ##fig = plt.figure(figsize = (8.5, 8.5))
-    ##ax = fig.add_subplot(111, projection='3d')
-    ##ax.scatter(X_grid, Y_grid, Z_grid, s = 1)
-    ##ax.scatter(*nodes.T)
-    ##plt.show()
-
-    ##import sys
-    ##sys.exit()
-
-    #fig = plt.figure(figsize = (8.5, 7.5))
-    #ax = plt.gca()
-
-    ##im = ax.imshow(abs_eigvec_grid)
-    ##im = ax.pcolor(np.rad2deg(Lon_grid), np.rad2deg(Lat_grid), abs_eigvec_grid)
-    #im = ax.pcolor(Lon_grid, Lat_grid, abs_eigvec_grid)
-    ##im = ax.pcolor(Lon_grid - np.pi, Lat_grid, abs_eigvec_grid)
-
-    ##ax.scatter(np.rad2deg(Lon_grid), np.rad2deg(Lat_grid), s = 1)
-    ##ax.scatter(lon_nodes, lat_nodes, s = 1, c = 'k')
-    ##ax.scatter(lon_nodes + np.pi, lat_nodes, s = 1, c = 'k')
-    #ax.set_aspect(1.0)
-
-    #plt.colorbar(im)
-
-    #plt.show()
-
-    return Lon_grid, Lat_grid, eigvec_grid
+    return lon_grid, lat_grid, eigvec_grid
 
 # Tools for projecting into vector spherical harmonics. -----------------------
 def unit_vectors_at_points(lon, lat):
@@ -985,11 +971,13 @@ def unit_vectors_at_points(lon, lat):
     Calculates unit coordinate vectors at specified coordinates.
 
     Input
+
     [n]     Number of query points
     lon     (n) Longitude of query points.
     lat     (n) Latitude of query points.
 
     Output
+
     r_hat   (n, 3) Outward radial unit vector at each of the query points.
     e_hat   (n, 3) Eastward unit vector at each of the query points.
     n_hat   (n, 3) Northward unit vector at each of the query points.
@@ -1021,15 +1009,20 @@ def unit_vectors_at_points(lon, lat):
 
 def project_along_unit_vectors(s, r_hat, e_hat, n_hat):
     '''
-    Find the radial, eastward and northward components of the eigenvectors by taking the dot product of each eigenvector with the radial, eastward and northward unit vectors.
+    Find the radial, eastward and northward components of a vector field by taking the dot product of each vector sample with the radial, eastward and northward unit vectors at the sample location.
 
     Input
 
     [n]     The number of nodes.
-    s       (n, 3) The displacement eigenvector at each node.
+    s       (n, 3) The vector at each node.
     r_hat   (n, 3) The outward radial unit vector at each node.
     e_hat   (n, 3) The eastward unit vector at each node.
     n_hat   (n, 3) The northward unit vector at each node.
+
+    Output
+
+    s_r, s_e, s_n
+        (n) The radial, east and north componets of the vector field at each sample point.
     '''
 
     # Calculate the dot product at each sample point.
@@ -1039,20 +1032,19 @@ def project_along_unit_vectors(s, r_hat, e_hat, n_hat):
         
     return s_r, s_e, s_n
 
-def transform_to_spherical_harmonics(s_r_grid, s_n_grid, s_e_grid, n_lat_grid, n_lon_grid, l_max = 7):
+def transform_to_spherical_harmonics(s_r_grid, s_n_grid, s_e_grid, n_lat_grid, n_lon_grid, l_max):
     '''
     Transforms a vector field into vector spherical harmonics.
 
-    Input
-    s_r_grid (n_lat_grid, n_lon_grid) The radial component of the vector field, sampled on a regular grid.
-    s_n_grid (n_lat_grid, n_lon_grid) Same as s_r_grid but for the northward component.
-    s_e_grid (n_lat_grid, n_lon_grid) Same as s_r_grid but for the eastward component.
-    l_max The maximum angular order of the spherical harmonic expansion.
+    Input:
 
-    Output
-    Ulm, Vlm, Wlm   The complex spherical harmonic coefficients of the radial (U), poloidal (V) and toroidal (W) components of the vector field.
-    l_list, m_list  A list of values of angular order (l) and degree (m) corresponding to the lists of spherical harmonic coefficients.
-    sh_calculator   The object used to perform the spherical harmonic transformation.
+    s_r_grid, s_n_grid, s_e_grid, n_lat_grid, n_lon_grid, l_max
+        See 'Definitions of variables'.
+
+    Output:
+
+    Ulm, Vlm, Wlm, l_list, m_list, sh_calculator
+        See 'Definitions of variables'.
     '''
     
     # Use SHTns to calculate the vector spherical harmonics.
@@ -1089,20 +1081,17 @@ def project_from_spherical_harmonics(sh_calculator, Ulm, Vlm, Wlm):
     '''
     Calculates the radial, consoidal and toroidal components of a vector field from the vector spherical harmonic coefficients. 
 
-    Input
+    Input:
 
-    sh_calculator   An object generated by the function transform_to_spherical_harmonics which can transform between spatial and spherical harmonic representations of a vector field.
-    Ulm, Vlm, Wlm   The complex vector spherical harmonic coefficeints of the vector field.
+    sh_calculator, Ulm, Vlm, Wlm
+        See 'Definitions of variables'.
 
     Output
-    Pr  The radial part of the field.
-    B   The magnitude of the consoidal part of the field.
-    Be  The eastward component of the consoidal part of the field.
-    Bn  The northward component of the consoidal part of the field.
-    C   The magnitude of the toroidal part of the field.
-    Ce  The eastward component of the toroidal part of the field.
-    Cn  The northward component of the toroidal part of the field.
+
+    Ur, Ve, Vn, We, Wn
+        See 'Definitions of variables'.
     '''
+
     # Do the inverse spherical harmonic transform (i.e. synthesis) of the radial, consoidal and toroidal coefficients separately to get the spatial representation of these parts of the field.
     # Note that zero_spec is used to set the other two components to zero in the calculation, and unwanted output components are sent to zero_spat.
     zero_spec   = sh_calculator.spec_array()
@@ -1115,31 +1104,43 @@ def project_from_spherical_harmonics(sh_calculator, Ulm, Vlm, Wlm):
                 Pr, zero_spat, zero_spat)
                 
     # Get consoidal part of field.
-    Bn = sh_calculator.spat_array()
-    Be = sh_calculator.spat_array()
+    Vn = sh_calculator.spat_array()
+    Ve = sh_calculator.spat_array()
     sh_calculator.SHqst_to_spat(
                 zero_spec, Vlm, zero_spec,
-                zero_spat, Bn, Be)
+                zero_spat, Vn, Ve)
     # Convert from theta component to north component.
-    Bn = Bn*-1.0
+    Vn = Vn*-1.0
     ## Calculate the magnitude of the consoidal field.
-    #B   = np.sqrt(Be**2.0 + Bn**2.0) 
+    #B   = np.sqrt(Ve**2.0 + Vn**2.0) 
     
     # Get toroidal part of field.
-    Cn = sh_calculator.spat_array()
-    Ce = sh_calculator.spat_array()
+    Wn = sh_calculator.spat_array()
+    We = sh_calculator.spat_array()
     sh_calculator.SHqst_to_spat(
                 zero_spec, zero_spec, Wlm,
-                zero_spat, Cn, Ce)
+                zero_spat, Wn, We)
     # Convert from theta component to north component.
-    Cn = Cn*-1.0
+    Wn = Wn*-1.0
     ## Calculate the magnitude of the toroidal field.
-    #C   = np.sqrt(Ce**2.0 + Cn**2.0)
+    #C   = np.sqrt(We**2.0 + Wn**2.0)
     
-    return Pr, Be, Bn, Ce, Cn
+    return Pr, Ve, Vn, We, Wn
 
 # Vector-spherical-harmonic projection at one radius ('quick mode'). ----------
 def vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, r_discons, i_mode, save_spatial = False):
+    '''
+    Calculate vector-spherical-harmonic coefficients of displacement field at the radius of maximum displacement.
+
+    Input:
+
+    dir_PM, dir_NM, l_max, eigvec_path_base, nodes_node_idxs, node_attbs, index_lists, r_discons, i_mode, save_spatial
+        See 'Definitions of variables'.
+
+    Output:
+
+    None (results are saved to file)
+    '''
 
     # Note: Must be an even number.
     n_lat_grid = 6*l_max
@@ -1158,34 +1159,34 @@ def vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_id
     index_lists = [np.intersect1d(x, i_allowed) for x in index_lists]
 
     # Find the radial coordinate where the largest displacement occurs.
-    r_max, region_max, eigvec_max = find_r_max(nodes, node_idxs, eigvec, index_lists, r_min = 0.1*r_discons[0])
+    r_max, i_region_max, eigvec_max = find_r_max(nodes, node_idxs, eigvec, index_lists, r_min = 0.1*r_discons[0])
 
     # Normalise the eigenvector, for better numerical behavior.
     eigvec = eigvec/eigvec_max
 
     # At this radial coordinate, interpolate the displacement field onto the sphere.
-    lon_grid, lat_grid, eigvec_grid = interpolate_eigvec_onto_sphere(r_max, region_max, nodes, node_idxs, eigvec, index_lists, n_lat_grid)
+    lon_grid, lat_grid, eigvec_grid = interpolate_eigvec_onto_sphere(r_max, i_region_max, nodes, node_idxs, eigvec, index_lists, n_lat_grid)
     n_lon_grid = lon_grid.shape[1]
 
     # At the grid points, calculate unit vectors in the radial, east and north directions (in terms of the Cartesian basis).
     r_hat_grid, e_hat_grid, n_hat_grid = unit_vectors_at_points(lon_grid, lat_grid)
-    
+
     # Project the vector field into the radial, east and north directions.
     eigvec_r_grid, eigvec_e_grid, eigvec_n_grid = project_along_unit_vectors(eigvec_grid, r_hat_grid, e_hat_grid, n_hat_grid)
 
     # Transform vector spatial components to vector spherical harmonics.
     Ulm, Vlm, Wlm, l_list, m_list, sh_calculator = \
         transform_to_spherical_harmonics(
-            eigvec_r_grid, eigvec_n_grid, eigvec_e_grid, n_lat_grid, n_lon_grid, l_max = l_max)
+            eigvec_r_grid, eigvec_n_grid, eigvec_e_grid, n_lat_grid, n_lon_grid, l_max)
 
     if save_spatial:
 
         # Calculate the spatial representation of the radial, consoidal and toroidal components.
-        Pr_grid, Be_grid, Bn_grid, Ce_grid, Cn_grid = \
+        Ur_grid, Ve_grid, Vn_grid, We_grid, Wn_grid = \
             project_from_spherical_harmonics(sh_calculator, Ulm, Vlm, Wlm)
 
         # Save spatial output.
-        array_out_spatial = np.array([eigvec_grid[..., 0], eigvec_grid[..., 1], eigvec_grid[..., 2], eigvec_r_grid, eigvec_e_grid, eigvec_n_grid, Pr_grid, Be_grid, Bn_grid, Ce_grid, Cn_grid])
+        array_out_spatial = np.array([eigvec_grid[..., 0], eigvec_grid[..., 1], eigvec_grid[..., 2], eigvec_r_grid, eigvec_e_grid, eigvec_n_grid, Ur_grid, Ve_grid, Vn_grid, We_grid, Wn_grid])
         dir_spatial = os.path.join(dir_processed, 'spatial')
         mkdir_if_not_exist(dir_spatial)
         file_out_spatial = 'quick_spatial_{:>05d}.npy'.format(i_mode)
@@ -1195,13 +1196,13 @@ def vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_id
 
     # Save spectral output.
     array_out_spectral = np.array([Ulm, Vlm, Wlm])
-
+    #
     # Add a header line with the scale information.
     array_out_spectral = np.insert(array_out_spectral, 0, [eigvec_max, 0.0, 0.0], axis = 1)
-
+    #
     # Add header with maximum radius information.
-    array_out_spectral = np.insert(array_out_spectral, 0, [r_max, region_max, 0.0], axis = 1)
-
+    array_out_spectral = np.insert(array_out_spectral, 0, [r_max, i_region_max, 0.0], axis = 1)
+    #
     dir_spectral = os.path.join(dir_processed, 'spectral')
     file_out_spectral = 'quick_spectral_{:>05d}.npy'.format(i_mode)
     path_out_spectral = os.path.join(dir_spectral, file_out_spectral)
@@ -1212,29 +1213,16 @@ def vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_id
 
 def vsh_projection_quick_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base, save_spatial = False):
     '''
-    Represents a mode in terms of the displacement on the spherical surface which contains the maximum displacement. This is usually indicative of the properties of the mode (i.e. spheroidal/toroidal, and dominant l-value) if there is not strong mode coupling. The first step is to find the radius at which the maximum displacement occurs, and the second step is to analyse the displacement at this radial coordinate.
+    A wrapper for vsh_projection_quick(), which assembles the relevant information.
 
     Input:
-    dir_input   Directory containing input model.
-    dir_output  Directory containing output of NormalModes code.
-    num         The number of the mode to be characterised.
-    l_max       The maximum angular order to use in the spherical harmonic expansion.
-    n_keep      How many l-coefficients to save.
-    r_min       Minimum radius when searching for the maximum displacement (some modes have large displacement at the core, but these are sparsely sampled so cannot be analysed properly).
 
-    Example of required input files:
-    mod.1_JOB1_pod2_np192_1.000000_1.900000_46.dat  Binary file containing mode displacement.
-    NM_*.txt                                     Standard output from SLURM job.
-    global_conf                                     NormalModes configuration file.
-    run_normal_modes.bash                           SLURM .sbatch script.
-    mod.1_pod2_np192_vlist.dat                      Vertex list.
-    mod.1_pod2_np192_vstat.dat                      Vertex attributes.
+    dir_PM, dir_NM, l_max, i_mode, eigvec_path_base, save_spatial
+        See 'Definitions of variables'.
 
     Output:
-    num         Same as input.
-    freq        The frequency of the mode.
-    rj          The radius of maximum displacement.
-    EU, EV, EW, l_E_max, E_of_l See process_displacement.
+
+    None (output is saved to file).
     '''
     
     #i_mode = np.random.randint(low = 1, high = 83) 
@@ -1252,6 +1240,18 @@ def vsh_projection_quick_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base
     return
 
 def vsh_projection_quick_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, save_spatial = False):
+    '''
+    A wrapper for vsh_projection_quick(), which assembles the relevant information and loops over all of the modes.
+
+    Input:
+
+    dir_PM, dir_NM, l_max, eigvec_path_base, save_spatial
+        See 'Definitions of variables'.
+
+    Output:
+
+    None (output is saved to file).
+    '''
 
     # Define directory names.
     dir_processed = os.path.join(dir_NM, 'processed')
@@ -1274,6 +1274,18 @@ def vsh_projection_quick_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, save
     return
 
 def vsh_projection_quick_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, save_spatial = False):
+    '''
+    A wrapper for vsh_projection_quick(), which assembles the relevant information and loops over all of the modes using all available processors.
+
+    Input:
+
+    dir_PM, dir_NM, l_max, eigvec_path_base, save_spatial
+        See 'Definitions of variables'.
+
+    Output:
+
+    None (output is saved to file).
+    '''
 
     # Define directory names.
     dir_processed = os.path.join(dir_NM, 'processed')
@@ -1327,6 +1339,7 @@ def main():
             
             vsh_projection_quick_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base)
 
+        # Loop over all modes using all available processors.
         elif i_mode_str == 'parallel':
 
             vsh_projection_quick_parallel(dir_PM, dir_NM, l_max, eigvec_path_base)

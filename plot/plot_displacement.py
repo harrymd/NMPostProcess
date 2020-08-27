@@ -1,3 +1,10 @@
+'''
+NMPostProcess/plot/plot_displacement.py
+Plots spatial and spectral representation of vector-spherical-harmonic fields.
+'''
+
+# Import modules. -------------------------------------------------------------
+
 # Core modules.
 import os
 
@@ -83,9 +90,24 @@ def save_figure(path_fig, fmt):
 
 # Plot displacement patterns. -------------------------------------------------
 def plot_sh_disp_all_modes(dir_NM, n_lat_grid, fmt = 'pdf'):
+    '''
+    For each mode, plots a vector field on the surface of a sphere in terms of the radial, consoidal and toroidal components.
+    This is a wrapper for plot_sh_disp_wrapper().
 
+    Input:
+
+    dir_NM, n_lat_grid, fmt
+        See 'Definitions of variables' in NMPostProcess/process.py.
+
+    Output:
+
+    None
+    '''
+
+    # Get a list of mode IDs to plot.
     mode_list = get_list_of_modes_from_output_files(dir_NM)
     
+    # Plot the modes one by one.
     for i_mode in mode_list:
 
         print('\nPlotting displacement for mode {:>5d}.'.format(i_mode))
@@ -95,6 +117,19 @@ def plot_sh_disp_all_modes(dir_NM, n_lat_grid, fmt = 'pdf'):
     return
 
 def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, show = True, fmt = 'pdf'):
+    '''
+    Plots a vector field on the surface of a sphere in terms of the radial, consoidal and toroidal components.
+    This is a wrapper for plot_sh_disp() which first loads the necessary arrays. 
+
+    Input:
+
+    dir_NM, i_mode, n_lat_grid, fmt
+        See 'Definitions of variables' in NMPostProcess/process.py.
+
+    Output:
+
+    None
+    '''
 
     # Reconstruct the coordinate grid.
     n_lon_grid = (2*n_lat_grid) - 1
@@ -122,52 +157,6 @@ def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, show = True, fmt = 'pdf'):
     # Expand the VSH into spatial components.
     U_r, V_e, V_n, W_e, W_n = project_from_spherical_harmonics(sh_calculator, Ulm, Vlm, Wlm)
 
-    #fig, ax_arr = plt.subplots(1, 3, figsize = (10.0, 3.5))
-
-    ## Define the colour map.
-    #c_interval          = 0.1
-    #c_min               = -1.0
-    #c_max               =  1.0
-    #c_levels      = np.linspace(c_min, c_max, num = 21)
-    ## 
-    #c_norm    = mpl.colors.Normalize(
-    #                    vmin = c_min,
-    #                    vmax = c_max)
-    ##            
-    #c_map     = plt.get_cmap('seismic')
-    #c_map.set_over('green')
-    #c_map.set_under('green')
-    #
-    #ax = ax_arr[0]
-    #conts = ax.contourf(
-    #    U_r,
-    #    c_levels,
-    #    norm        = c_norm,
-    #    cmap        = c_map)
-
-    #V = np.sqrt((V_e**2.0) + (V_n**2.0))
-    #ax = ax_arr[1]
-    #conts = ax.contourf(
-    #    V,
-    #    c_levels,
-    #    norm        = c_norm,
-    #    cmap        = c_map)
-    ##ax_arr[1].contourf(V)
-
-    #W = np.sqrt((W_e**2.0) + (W_n**2.0))
-    #ax = ax_arr[2]
-    #conts = ax.contourf(
-    #    W,
-    #    c_levels,
-    #    norm        = c_norm,
-    #    cmap        = c_map)
-    #ax_arr[1].contourf(W)
-
-    #plt.show()
-
-    #import sys
-    #sys.exit()
-    
     # Plot.
     # The contourf() function can suffer an error when the input is almost flat (e.g. plotting the toroidal component of a spheroidal mode). To avoid this error, we reduce the number of contour levels.
     n_c_levels_default = 11 
@@ -181,7 +170,6 @@ def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, show = True, fmt = 'pdf'):
         print("Encountered Cartopy attribute error, trying with fewer contour levels.")
         plt.close()
         plot_sh_disp_3_comp(lon_grid, lat_grid, U_r, V_e, V_n, W_e, W_n, ax_arr = None, show = False, title = title, n_c_levels = n_c_levels_fallback)
-        #raise
 
     # Save the plot.
     dir_plot = os.path.join(dir_processed, 'plots')
@@ -203,6 +191,31 @@ def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, show = True, fmt = 'pdf'):
     return
 
 def plot_sh_disp(lon_grid, lat_grid, v_r = None, v_n = None, v_e = None, ax = None, ax_cbar = None, n_c_levels = 21):
+    '''
+    Plots the displacement pattern of a radial or tangential vector field on surface of a sphere. If the field is purely radial, the plot shows the magnitude and sign of the displacement. If the field is purely tangential, the plot shows the absolute value of the displacement, with arrows showing the direction.
+
+    Note:
+
+    There are known issues with the contourf() function for Cartopy geoaxes. See NMPostProcess/README.md for more information.
+
+    Input:
+
+    lon_grid, lat_grid
+        See 'Definitions of variables' in NMPostProcess/process.py.
+
+    v_r, v_n, v_e
+        (n_lat_grid, n_lon_grid) The radial, north and east components. Either specify v_r only (for a radial plot) or v_e and v_n only (for a tangential plot).
+    ax
+        An axis for plotting. If None, will be created.
+    ax_cbar
+        The axis for the colour bar. If None, no colour bar shown.
+    n_c_levels
+        The number of colour bar levels.
+
+    Output:
+
+    None
+    '''
     
     # Check that the right combination of components was provided.
     err_message_comps = 'Must provide either the radial component, or both the north and east components (for a tangential plot)' 
@@ -286,6 +299,18 @@ def plot_sh_disp(lon_grid, lat_grid, v_r = None, v_n = None, v_e = None, ax = No
     return
 
 def plot_sh_disp_3_comp(lon_grid, lat_grid, U_r, V_e, V_n, W_e, W_n, ax_arr = None, show = True, title = None, n_c_levels = 21): 
+    '''
+    Plots a vector field on the surface of a sphere in terms of the radial, consoidal and toroidal components.
+
+    Input:
+
+    lon_grid, lat_grid, U_r, V_e, V_n, W_e, W_n, show, title
+        See 'Definitions of variables' in NMPostProcess/process.py.
+    ax_arr
+        An array of three GeoAxes, one for each component.
+    n_c_levels
+        See plot_sh_disp().
+    '''
     
     # Create axis array.
     # It must have three axes and the third axis must have the cax (colorbar axis) attribute.
@@ -308,33 +333,12 @@ def plot_sh_disp_3_comp(lon_grid, lat_grid, U_r, V_e, V_n, W_e, W_n, ax_arr = No
     # Unpack the axis array.
     ax_U, ax_V, ax_W = ax_arr
     
-    # Plot the displacement of each component.
-    # The contourf() function can suffer an error when the input is almost flat (e.g. plotting the toroidal component of a spheroidal mode). To avoid this error, we reduce the number of contour levels.
-    #n_c_levels = 21
-    #n_c_levels_backup = 11
-    #try:
-    #    plot_sh_disp(lon_grid, lat_grid, v_r = U_r,             ax = ax_U, n_c_levels = n_c_levels)
-    #except AttributeError: 
-    #    plot_sh_disp(lon_grid, lat_grid, v_r = U_r,             ax = ax_U, n_c_levels = n_c_levels_backup)
-
-    #try:
-    #    plot_sh_disp(lon_grid, lat_grid, v_e = V_e, v_n = V_n,  ax = ax_V, n_c_levels = n_c_levels)
-    #except AttributeError: 
-    #    plot_sh_disp(lon_grid, lat_grid, v_e = V_e, v_n = V_n,  ax = ax_V, n_c_levels = n_c_levels_backup)
-
-    #try:
-    #    print('Aaaa')
-    #    plot_sh_disp(lon_grid, lat_grid, v_e = W_e, v_n = W_n,  ax = ax_W, n_c_levels = n_c_levels, ax_cbar = ax_W.cax)
-    #except AttributeError: 
-    #    print('BBB')
-    #    plot_sh_disp(lon_grid, lat_grid, v_e = W_e, v_n = W_n, ax = ax_W, n_c_levels = n_c_levels_backup, ax_cbar = ax_W.cax)
-
-    # This is the simpler version.
-    #n_c_levels = 11
+    # Plot the displacement for each component.
     plot_sh_disp(lon_grid, lat_grid, v_r = U_r,             ax = ax_U, n_c_levels = n_c_levels)
     plot_sh_disp(lon_grid, lat_grid, v_e = V_e, v_n = V_n,  ax = ax_V, n_c_levels = n_c_levels)
     plot_sh_disp(lon_grid, lat_grid, v_e = W_e, v_n = W_n,  ax = ax_W, n_c_levels = n_c_levels, ax_cbar = ax_W.cax)
 
+    # Add a title (if requested).
     if title is not None:
 
         plt.suptitle(title)
@@ -351,6 +355,10 @@ def plot_sh_disp_3_comp(lon_grid, lat_grid, U_r, V_e, V_n, W_e, W_n, ax_arr = No
 
 # Plot spectral data. ---------------------------------------------------------
 def plot_sh_real_coeffs_3_comp_all_modes(dir_NM, fmt = 'pdf'):
+    '''
+    Loop over all the modes and plot spherical harmonics.
+    A wrapper for plot_sh_real_coeffs_3_comp_wrapper().
+    '''
 
     mode_list = get_list_of_modes_from_output_files(dir_NM)
     
@@ -363,6 +371,10 @@ def plot_sh_real_coeffs_3_comp_all_modes(dir_NM, fmt = 'pdf'):
     return
 
 def plot_sh_real_coeffs_3_comp_wrapper(dir_NM, i_mode, show = True, fmt = 'pdf'):
+    '''
+    Load coefficients, then plot 3 sets of spherical harmonic coefficients on a grid.
+    A wrapper for plot_sh_real_coeffs_3_comp().
+    '''
 
     # Load VSH coefficients.
     dir_processed = os.path.join(dir_NM, 'processed')
@@ -411,6 +423,9 @@ def plot_sh_real_coeffs_3_comp_wrapper(dir_NM, i_mode, show = True, fmt = 'pdf')
     return 
 
 def plot_sh_real_coeffs(l_list, m_list, coeffs, c_lims = None, ax = None, show = True, add_cbar = True, label = None, l_lims_plot = None, flip = False, stack_vertical = False, in_ticks = False, abs_plot = True, x_label = 'Angular order, $\ell$', y_label = 'Azimuthal order, $m$'):
+    '''
+    Plot spherical harmonics on a grid.
+    '''
     
     # Put the list of coefficients onto a grid, for plotting.
     # k Index in list.
@@ -568,6 +583,7 @@ def plot_sh_real_coeffs(l_list, m_list, coeffs, c_lims = None, ax = None, show =
 
         ax.tick_params(axis = "x", direction = "in", pad = -15)
 
+    # Tidy up the ticks.
     ax.xaxis.set_major_locator(MultipleLocator(5.0))
     ax.xaxis.set_minor_locator(IndexLocator(base = 1.0, offset = 0.5))
     ax.yaxis.set_major_locator(MultipleLocator(5.0))
@@ -582,6 +598,10 @@ def plot_sh_real_coeffs(l_list, m_list, coeffs, c_lims = None, ax = None, show =
     return image
 
 def plot_sh_real_coeffs_3_comp(l, m, ulm, vlm, wlm, title_str = None, fig = None, ax_arr = None, show = True, flip = False, c_max = None, abs_plot = True): 
+    '''
+    Plot three sets of spherical harmonics on a grid.
+    A wrapper for plot_sh_real_coeffs().
+    '''
 
     # Create the figure if none was specified.
     if fig is None: 
@@ -664,13 +684,17 @@ def main():
     plot_type       = plot_input_args[0]
     i_mode_str      = plot_input_args[1]
     fmt             = plot_input_args[2]
+
+    # Plot all modes.
     if i_mode_str == 'all':
 
+        # Spatial plot.
         if plot_type == 'spatial':
 
             n_lat_grid = int(plot_input_args[3])
             plot_sh_disp_all_modes(dir_NM, n_lat_grid, fmt = fmt)
 
+        # Spectral plot.
         elif plot_type == 'spectral':
 
             plot_sh_real_coeffs_3_comp_all_modes(dir_NM, fmt = fmt)
@@ -679,6 +703,7 @@ def main():
 
             raise ValueError('Plot type {:} from input file {:} not recognised.'.format(plot_type, input_file))
 
+    # Plot one mode.
     else:
 
         i_mode = int(i_mode_str)

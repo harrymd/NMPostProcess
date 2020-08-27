@@ -1,12 +1,40 @@
+'''
+NMPostProcess/plot/plot_mode_diagram.py
+Plots a mode diagram based on vector spherical harmonic expansion.
+'''
+
+# Load modules. ---------------------------------------------------------------
+
+# Load standard modules.
 import os
 
+# Load third-party modules.
 import matplotlib.pyplot as plt
 import numpy as np
 
+# Load local modules.
 from common import lf_clusters, read_eigenvalues
 
+# Utilities. ------------------------------------------------------------------
 def label_multiplets(ax, cluster_multiplicities, l_clusters, f_cluster_means, missing_modes = None):
+    '''
+    Labels multiplets in the mode diagram.
+
+    Input:
+
+    ax
+        The axis upon which to put the labels.
+    cluster_multiplicities, l_clusters, f_cluster_means
+        See lf_clusters() in NMPostProcess/common.py.
     
+    Output:
+
+    None
+        
+    '''
+    
+    # mode = 'excess' will label the clusters with too many modes (for their given l-value) in green, and those with too few in red. Other modes will not be labelled.
+    # mode = 'all' will label each cluster with the number of modes in contains (in black).
     mode = 'excess'
 
     n_clusters = len(l_clusters)
@@ -83,6 +111,7 @@ def label_multiplets(ax, cluster_multiplicities, l_clusters, f_cluster_means, mi
 
             raise NotImplementedError
 
+# Plotting. -------------------------------------------------------------------
 def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = True, path_fig = None):
     '''
     Plots angular order versus frequency.

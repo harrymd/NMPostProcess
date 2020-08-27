@@ -1,6 +1,13 @@
+'''
+NMPostProcess/common.py
+Various scripts used by multiple functions.
+'''
+
+# Import standard modules.
 from glob import glob
 import os
 
+# Import third-party modules.
 import numpy as np
 
 # Generic operations. ---------------------------------------------------------
@@ -50,6 +57,19 @@ def read_eigenvalues(file_eigval_list):
     return num, freq
 
 def get_list_of_modes_from_output_files(dir_NM):
+    '''
+    Searches output directory for matching filenames and returns a list of mode IDs.
+
+    Input:
+
+    dir_NM
+        See 'Definition of variables' in NMPostProcess/process.py.
+
+    Output:
+
+    i_mode_list
+        A list of mode ID integers.
+    '''
 
     regex_eigvec = '*.dat'
     path_regex_eigvec = os.path.join(dir_NM, regex_eigvec)
@@ -81,32 +101,66 @@ def get_list_of_modes_from_output_files(dir_NM):
     return i_mode_list
 
 def load_vsh_coefficients(dir_NM, i_mode):
+    '''
+    Loads the vector spherical harmonic coefficients created by NMPostProcess/process.py.
 
+    Input:
+
+    dir_NM, i_mode
+        See 'Definitions of variables'.
+
+    Output:
+
+    Ulm, Vlm, Wlm, scale, r_max, i_region_max
+        See 'Definition of variables' in NMPostProcess/process.py.
+    '''
+
+    # Create the file path and load the NumPy array.
     dir_processed = os.path.join(dir_NM, 'processed')
     dir_spectral = os.path.join(dir_processed, 'spectral')
     file_spectral_data = 'quick_spectral_{:>05d}.npy'.format(i_mode)
     path_spectral_data = os.path.join(dir_spectral, file_spectral_data)
     spectral_data = np.load(path_spectral_data)
 
+    # Read the first header line to get the radius information.
     header_radius       = np.real(spectral_data[:, 0])
     r_max               = header_radius[0]
-    region_max_int      = int(header_radius[1])
+    i_region_max        = int(header_radius[1])
 
+    # Read the second header line to get the scale information.
     header_scale = np.real(spectral_data[:, 1])
     scale = header_scale[0]
 
+    # Read the coefficients.
     Ulm, Vlm, Wlm = spectral_data[:, 2:]
 
-    return Ulm, Vlm, Wlm, scale, r_max, region_max_int
+    return Ulm, Vlm, Wlm, scale, r_max, i_region_max
 
 # Functions related to spherical harmonics.
 def convert_complex_sh_to_real(Xlm, l_max):
     '''
+    Converts complex spherical harmonics to real ones.
     Dahlen and Tromp (1998), eq. B.98.
+
+    Input:
+
+    Xlm
+        The complex spherical harmonic coefficients in SHTns format. The number of coefficients is (l_max + 1)(l_max + 2)/2.
+    l_max
+        The maximum angular order which was used in SHTns to calculate the coefficients.
+    
+    Returns:
+
+    xlm
+        The real spherical harmonic coefficients. The number of coefficients is (l_max + 1)*(l_max + 1).
+    l_real
+        A list of the l-values corresponding to each coefficient.
+    m_real
+        A list of the m-values corresponding to each coefficient.
     '''
     
+    # Initialise output arrays.
     sqrt2 = np.sqrt(2.0)
-
     n_coeff = (l_max + 1)**2
     xlm     = np.zeros(n_coeff)
     l_real  = np.zeros(n_coeff, dtype = np.int)
@@ -150,6 +204,19 @@ def convert_complex_sh_to_real(Xlm, l_max):
     return xlm, l_real, m_real
 
 def make_l_and_m_lists(l_max):
+    '''
+    Calculates the lists of the angular and azimuthal order of coefficients stored in SHTns format.
+
+    Input:
+
+    l_max
+        The maximum l-value used for calculation the coefficients with SHTns.
+
+    Output:
+
+    l_list, m_list
+        The l- and m-values corresponding to each coefficient.
+    '''
 
     n = (l_max + 1)*(l_max + 2)//2
     
@@ -168,7 +235,7 @@ def make_l_and_m_lists(l_max):
 
     return l_list, m_list
 
-#
+# Miscellaneous functions. ----------------------------------------------------
 def lf_clusters(l, f, f_tol = 0.001):
     '''
     Groups modes with the same l-value and similar frequencies into clusters.
@@ -272,33 +339,3 @@ def lf_clusters(l, f, f_tol = 0.001):
         cluster_multiplicities[i] = len(f_clusters[i])
 
     return i_clusters, l_clusters, f_clusters, n_clusters, f_cluster_means, cluster_multiplicities
-
-# Old. ------------------------------------------------------------------------
-def get_list_of_modes_from_output_files_old(dir_NM, name_base, use_G, pOrder, n_processes, f_min, f_max):
-
-    # Get a list of modes.
-    if f_min < 1.0:
-        name_eigvec_fmt = '{}_JOB{:d}_pod{:d}_np{:d}_{:.7f}_{:.6f}_*.dat'
-    else:
-        name_eigvec_fmt = '{}_JOB{:d}_pod{:d}_np{:d}_{:.6f}_{:.6f}_*.dat'
-    regex_eigvec = name_eigvec_fmt.format(name_base, use_G, pOrder, n_processes, f_min, f_max)
-    path_regex_eigvec = os.path.join(dir_NM, regex_eigvec)
-    eigvec_path_list = glob(path_regex_eigvec)
-    #
-    i_mode_list = []
-    for eigvec_path in eigvec_path_list:
-
-        # Remove .dat suffix.
-        eigvec_path = eigvec_path[:-4]
-
-        # Get integer at end of file name.
-        i_mode = int(eigvec_path.split('_')[-1])
-        
-        # Save.
-        i_mode_list.append(i_mode)
-
-    # Convert to NumPy array and sort.
-    i_mode_list = np.array(i_mode_list, dtype = np.int)
-    i_mode_list = np.sort(i_mode_list)
-
-    return i_mode_list

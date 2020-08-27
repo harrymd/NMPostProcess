@@ -1,4 +1,4 @@
-spatial
-23
+spectral
+all
 png
 90
