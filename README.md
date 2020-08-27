@@ -103,7 +103,7 @@ To select 'quick projection', set the third line `input_NMPostProcess.txt` to `q
 <li> The number of the mode.</li>
 </ol>
   
-For example, to project mode number 15 using a maximum $\ell$-value of 10, call the command
+For example, to project mode number 15 using a maximum <img src="https://render.githubusercontent.com/render/math?math=\ell">-value of 10, call the command
 
 ```
 python3 project.py
@@ -121,9 +121,9 @@ quick
 
 The mode number can also be set as `all` to loop over all modes (this can be slow for large runs).
 
-Choosing the maximum $\ell$-value should be based on the expected spatial wavelength of the modes, which depends on the upper frequency limit of the *NormalModes* run. For example, on Earth, we see that modes have $\ell$-values less than approximately $10\times f$, where $f$ is the frequency in mHz. In this example, the run had an upper frequency limit of 1.0 mHz, so a maximum $\ell$-value of 10 was appropriate. Similar relationships can deduced for other planets using spherically-symmetric codes such as [*Mineos*](https://geodynamics.org/cig/software/mineos/). Choosing a maximum $\ell$-value that is much too high will slow down the processing and may increase numerical noise. If it is too low, the expansion of the spatial patterns will be truncated, causing aliasing and mode misidentification.
+Choosing the maximum <img src="https://render.githubusercontent.com/render/math?math=\ell">-value should be based on the expected spatial wavelength of the modes, which depends on the upper frequency limit of the *NormalModes* run. For example, on Earth, we see that modes have <img src="https://render.githubusercontent.com/render/math?math=\ell">-values less than approximately <img src="https://render.githubusercontent.com/render/math?math=10\times f">, where <img src="https://render.githubusercontent.com/render/math?math=10\times f"> where <img src="https://render.githubusercontent.com/render/math?math=f"> is the frequency in mHz. In this example, the run had an upper frequency limit of 1.0 mHz, so a maximum <img src="https://render.githubusercontent.com/render/math?math=\ell">-value of 10 was appropriate. Similar relationships can deduced for other planets using spherically-symmetric codes such as [*Mineos*](https://geodynamics.org/cig/software/mineos/). Choosing a maximum <img src="https://render.githubusercontent.com/render/math?math=\ell">-value that is much too high will slow down the processing and may increase numerical noise. If it is too low, the expansion of the spatial patterns will be truncated, causing aliasing and mode misidentification.
 
-The maximum $\ell$-value also controls the spacing of the regular longitude-latitude grid used in the interpolation step (see following section). The number of latitude grid points is chosen to be $6\times \ell_{max}$, and the number of longitude grid points is twice this many, which should be sufficient to avoid aliasing.
+The maximum <img src="https://render.githubusercontent.com/render/math?math=\ell">-value also controls the spacing of the regular longitude-latitude grid used in the interpolation step (see following section). The number of latitude grid points is chosen to be <img src="https://render.githubusercontent.com/render/math?math=6\times \ell_{max}">, and the number of longitude grid points is twice this many, which should be sufficient to avoid aliasing.
 
 ### The projection output files
 
@@ -134,7 +134,7 @@ The projection will create a number of output files in the *NormalModes* output 
 * `indices_interior_*.txt` Similar to the discontinuity files, listing the indices of sample points belonging to each interior region, starting with the innermost region.
 * `nodes.txt` The coordinates of the nodes of the mesh (including second-order nodes).
 
-The projected output is a series of *SHTns* complex vector spherical harmonics, which are written to *NumPy* binary files `quick_spectral_*.npy` in the `processed/spectral/` subdirectory. The mode number is indicated in the file name. There are three kinds of coefficients (radial $U_{lm}$, consoidal $V_{lm}$ and toroidal $W_{lm}$) and one header line, so each file stores array of shape $(3, N + 1)$ where $N$ is the number of coefficients. The number of coefficients is $(\ell_{max} + 1)(\ell_{max} + 2)/2$. The coefficients are stored in the order used by *SHTns*.
+The projected output is a series of *SHTns* complex vector spherical harmonics, which are written to *NumPy* binary files `quick_spectral_*.npy` in the `processed/spectral/` subdirectory. The mode number is indicated in the file name. There are three kinds of coefficients (radial <img src="https://render.githubusercontent.com/render/math?math=U_{lm}">, consoidal <img src="https://render.githubusercontent.com/render/math?math=V_{lm}"> and toroidal <img src="https://render.githubusercontent.com/render/math?math=W_{lm}">) and one header line, so each file stores array of shape <img src="https://render.githubusercontent.com/render/math?math=(3, N %2B 1)"> where <img src="https://render.githubusercontent.com/render/math?math=N"> is the number of coefficients. The number of coefficients is <img src="https://render.githubusercontent.com/render/math?math=(\ell_{max} %2B 1)(\ell_{max} %2B 2)/2">. The coefficients are stored in the order used by *SHTns*.
 
 ### How to plot the projection output
 
@@ -187,7 +187,7 @@ we get a spectral plot:
 
 ![](example_plots/spectrum.png "Example of a spectral plot.")
 
-This shows the VSH coefficients (radial $U_{lm}$, consoidal $V_{lm}$ and toroidal $W_{lm}$). They have been converted from complex to real format (so they range from $m = -\ell_{max}$ to $\ell_{max}$). We can see that this mode is dominantly spheroidal with $\ell = 3$. We also know the frequency of the mode (0.415 mHz) from the `eigenvalue_list.txt` file. Comparison with calculations of a spherically-symmetric Earth then allows us to identify this mode as one of the seven nearly-degenerate modes of Earth's $_{0}\text{S}_{3}$ multiplet.
+This shows the VSH coefficients (radial <img src="https://render.githubusercontent.com/render/math?math=U_{lm}">, consoidal <img src="https://render.githubusercontent.com/render/math?math=V_{lm}"> and toroidal <img src="https://render.githubusercontent.com/render/math?math=W_{lm}">). They have been converted from complex to real format (so they range from <img src="https://render.githubusercontent.com/render/math?math=m = -\ell_{max}"> to <img src="https://render.githubusercontent.com/render/math?math=\ell_{max}">). We can see that this mode is dominantly spheroidal with <img src="https://render.githubusercontent.com/render/math?math=\ell = 3">. We also know the frequency of the mode (0.415 mHz) from the `eigenvalue_list.txt` file. Comparison with calculations of a spherically-symmetric Earth then allows us to identify this mode as one of the seven nearly-degenerate modes of Earth's <img src="https://render.githubusercontent.com/render/math?math=_{0}\text{S}_{3}"> multiplet.
 
 <a href="#top">Back to top</a>
 
@@ -195,23 +195,23 @@ This shows the VSH coefficients (radial $U_{lm}$, consoidal $V_{lm}$ and toroida
 
 ## How to run automatic mode identification
 
-The dominant $\ell$-value and mode type (spheroidal or toroidal) can be determined automatically from the power distribution VSH coefficients. To do this, process each mode as described above using `process.py`. Then run
+The dominant <img src="https://render.githubusercontent.com/render/math?math=\ell">-value and mode type (spheroidal or toroidal) can be determined automatically from the power distribution VSH coefficients. To do this, process each mode as described above using `process.py`. Then run
 
 ```
 python3 characterise.py
 ```
 
-This first creates a file `characterisation_quick.npy` in the processed output directory. This stores an array of shape $((6 + \ell_{max}), M)$ where $M$ is the number of modes. The rows of the array are:
+This first creates a file `characterisation_quick.npy` in the processed output directory. This stores an array of shape <img src="https://render.githubusercontent.com/render/math?math=((6 %2B \ell_{max}), M)"> where <img src="https://render.githubusercontent.com/render/math?math=M"> is the number of modes. The rows of the array are:
 
-* 0, 1, 2: The spectral 'power', $P$, in the $U$, $V$ and $W$ components, for example $P_{U} = \sum_{l,m}U_{lm}^{2}$.
-* 3, ..., 3 + $\ell_{max}$: The spectral 'power' in each $\ell$-band, defined as $P_{l} = \sum_{m}U_{lm}^{2}$.
-* 4 + $\ell_{max}$: The radius at which the maximum displacement occurs.
-* 5 + $\ell_{max}$: The 'region' in which the maximum displacement occurs. The region is an integer starting at 0 for the free surface, 1 for the interior of the first shell, 2 for the lower surface of the first shell, 3 for the upper surface of the second shell, and so on.
+* 0, 1, 2: The spectral 'power', <img src="https://render.githubusercontent.com/render/math?math=P">, in the <img src="https://render.githubusercontent.com/render/math?math=U">, <img src="https://render.githubusercontent.com/render/math?math=V"> and <img src="https://render.githubusercontent.com/render/math?math=W"> components, for example <img src="https://render.githubusercontent.com/render/math?math=P_{U} = \sum_{l,m}U_{lm}^{2}">.
+* 3, ..., 3 + <img src="https://render.githubusercontent.com/render/math?math=\ell_{max}">: The spectral 'power' in each <img src="https://render.githubusercontent.com/render/math?math=\ell">-band, defined as <img src="https://render.githubusercontent.com/render/math?math=P_{l} = \sum_{m}U_{lm}^{2}">.
+* 4 + <img src="https://render.githubusercontent.com/render/math?math=\ell_{max}">: The radius at which the maximum displacement occurs.
+* 5 + <img src="https://render.githubusercontent.com/render/math?math=\ell_{max}">: The 'region' in which the maximum displacement occurs. The region is an integer starting at 0 for the free surface, 1 for the interior of the first shell, 2 for the lower surface of the first shell, 3 for the upper surface of the second shell, and so on.
 
 This information is then used to identify the modes. The mode identification is saved in the file `mode_ids.txt`. The file has one row per mode. Each row contains four integers, giving
 
 1. The mode number.
-2. The $\ell$-value.
+2. The <img src="https://render.githubusercontent.com/render/math?math=\ell">-value.
 3. The mode type (0 for radial, 1 for spheroidal, and 2 for toroidal).
 4. The shell within which the maximum displacement occurs. This is used for distinguishing toroidal modes in different solid regions.
 
@@ -221,7 +221,7 @@ For example, the mode plotted in the previous examples has the following line:
 15 3 1 1
 ```
 
-meaning mode 15 has $\ell$ = 3, is spheroidal, with maximum displacement in the outer core.
+meaning mode 15 has <img src="https://render.githubusercontent.com/render/math?math=\ell = 3">, is spheroidal, with maximum displacement in the outer core.
 
 To plot the mode identifications, run
 
@@ -235,7 +235,7 @@ which produces a plot such as
 
 This plot shows all of the spheroidal, toroidal and radial modes, as indicated in the legend. Note that 'T0' indicates 'toroidal modes from shell 0' where shell 0 is the outermost shell, in this case the mantle. At higher frequencies, we would also expect T2 modes (inner-core toroidal modes).
 
-For spherically-symmetrical models, modes are expected to occur in 'multiplets' containing $2\ell + 1$ modes of identical frequency. More generally, the multiplets will show small frequency splittings. The plotting code attempts to group the modes into clusters and will label multiplets with too many modes (in red) or too few modes (in green) for the given $\ell$-value. In this example, we see that the multiplet $_{3}\text{S}_{2}$ is missing 3 modes. This is because the mode has a frequency of almost exactly 1.0 mHz so falls on the boundary of the eigenvalue filter. All of the other modes are recovered (note that toroidal modes with $\ell = 0$ or $\ell = 1$ and the modes $_{0}\text{S}_{1}$ and $_{1}\text{S}_{1}$ cannot be generated by an internal source and are not returned by *NormalModes*).
+For spherically-symmetrical models, modes are expected to occur in 'multiplets' containing <img src="https://render.githubusercontent.com/render/math?math=2\ell + 1"> modes of identical frequency. More generally, the multiplets will show small frequency splittings. The plotting code attempts to group the modes into clusters and will label multiplets with too many modes (in red) or too few modes (in green) for the given <img src="https://render.githubusercontent.com/render/math?math=\ell">-value. In this example, we see that the multiplet <img src="https://render.githubusercontent.com/render/math?math=_{3}\text{S}_{2}"> is missing 3 modes. This is because the mode has a frequency of almost exactly 1.0 mHz so falls on the boundary of the eigenvalue filter. All of the other modes are recovered (note that toroidal modes with <img src="https://render.githubusercontent.com/render/math?math=\ell = 0"> or <img src="https://render.githubusercontent.com/render/math?math=\ell = 1"> and the modes <img src="https://render.githubusercontent.com/render/math?math=_{0}\text{S}_{1}"> and <img src="https://render.githubusercontent.com/render/math?math=_{1}\text{S}_{1}"> cannot be generated by an internal source and are not returned by *NormalModes*).
 
 The mode clustering information can be helpful for identifying numerical errors (usually caused by a too-coarse mesh) or coupled modes in non-spherical models. However, in more complicated models at higher frequencies it becomes difficult to automate the clustering, and the clustering information may not be meaningful. Users can try changing the clustering tolerance `f_tol` in the script `characterise.py`.
 
@@ -267,7 +267,7 @@ Parallel processing is often more effective if you have access to a cluster with
 
 ## Description of the processing steps
 
-Vector spherical harmonics (VSHs) are the natural basis to describe the modes of spherically-symmetrical planets (see Dahlen and Tromp, 1998, chapter 8). They are also a good starting point for non-spherically-symmetric planets if the deviations from spherical symmetry are small. The main task of *NMPostProcess* is to project the vector displacement fields (eigenfunctions) of the modes calculated by *NormalModes* into VSHs to allow the modes to be identified. In particular, from the VSH expansion it is trivial to separate toroidal and spheroidal modes, and determine the $\ell$-value of the mode. For these tasks it is usually sufficient to use the VSH expansion onto a single spherical surface. This is called 'quick projection'. Sometimes it is helpful to calculate the VSH expansion at various radial distances spanning the interior of the planet; we call this 'full projection'.
+Vector spherical harmonics (VSHs) are the natural basis to describe the modes of spherically-symmetrical planets (see Dahlen and Tromp, 1998, chapter 8). They are also a good starting point for non-spherically-symmetric planets if the deviations from spherical symmetry are small. The main task of *NMPostProcess* is to project the vector displacement fields (eigenfunctions) of the modes calculated by *NormalModes* into VSHs to allow the modes to be identified. In particular, from the VSH expansion it is trivial to separate toroidal and spheroidal modes, and determine the <img src="https://render.githubusercontent.com/render/math?math=\ell">-value of the mode. For these tasks it is usually sufficient to use the VSH expansion onto a single spherical surface. This is called 'quick projection'. Sometimes it is helpful to calculate the VSH expansion at various radial distances spanning the interior of the planet; we call this 'full projection'.
 
 ### Quick projection
 
