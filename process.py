@@ -32,7 +32,7 @@ f_min, f_max    The frequency limits of the run.
 n_processes     The product of n_nodes and n_tasks_per_node. The total number of computational processes used.
 r_surface       The outer radius of the planet.
 r_discons       A list of the radii of solid-fluid discontinuities within the planet (will be set to None if there are none).
-state_inner     A string describing the state of the inner core of the planet, either 'fluid' or 'solid'. Set to None if the planet has no solid-fluid discontinuities.
+state_outer     A string describing the state of the inner core of the planet, either 'fluid' or 'solid'. Set to None if the planet has no solid-fluid discontinuities.
 boundary_tol    A tolerance for floating point checks to determine if a point is on a boundary. This is only used for points at the free surface, which are not assigned a different node attribute by the NormalModes code (unlike fluid-solid boundary nodes).
 '''
 
@@ -105,12 +105,12 @@ def read_discon_file(path_discon_info):
         lines = in_id.readlines()
         lines = [x.strip() for x in lines]
 
-        state_inner = lines[0]
+        state_outer = lines[0]
         r_discons = np.array([float(x) for x in lines[1:]])
 
-    return r_discons, state_inner
+    return r_discons, state_outer
     
-def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_inner, boundary_tol = 'default'):
+def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default'):
     '''
     Output
 
@@ -128,7 +128,7 @@ def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_inner,
     # Find nodes on the free surface.
     i_shell = 0
     is_outer = True
-    surface_condition, j_surface = get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_inner)
+    surface_condition, j_surface = get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer)
 
     # Find all interior nodes (must remove the surface nodes).
     interior_condition = (((node_attbs == 0) | (node_attbs == 1)) & ~surface_condition)
@@ -185,7 +185,7 @@ def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_inner,
             for is_outer in is_outer_list:
                 
                 # Search for the boundary samples.
-                _, j_discon = get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_inner, boundary_tol = 'default')
+                _, j_discon = get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default')
 
                 index_lists_boundaries.append(j_discon)
 
@@ -202,7 +202,7 @@ def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_inner,
 
     return index_lists_interior, index_lists_boundaries, index_lists
 
-def get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_inner, boundary_tol = 'default'):
+def get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default'):
     '''
     Output:
 
@@ -236,7 +236,7 @@ def get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_d
             i_discon = i_shell + 1
 
         # Get discon lists.
-        r_discon_midpoints, state_list, n_interior_discons = get_discon_info(r_discons, state_inner)
+        r_discon_midpoints, state_list, n_interior_discons = get_discon_info(r_discons, state_outer)
         
         if n_interior_discons > 1:
 
@@ -326,13 +326,13 @@ def pre_process(dir_PM, dir_NM):
 
         # Read the discontinuity radius information.
         path_discon_info = os.path.join(dir_PM, 'radii.txt')
-        r_discons, state_inner = read_discon_file(path_discon_info)
+        r_discons, state_outer = read_discon_file(path_discon_info)
 
         # Load sample index and attribute information.
         node_idxs, node_attbs = load_sample_indices_and_attribs(dir_NM)
             
         # Get list of indices of samples in regions (interiors and boundaries).
-        _, _, index_lists = get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_inner, boundary_tol = 'default')
+        _, _, index_lists = get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default')
 
         # Save the index list.
         print('Saving index lists file: {:}'.format(path_index_lists))
@@ -673,13 +673,13 @@ def read_info_for_projection(dir_PM, dir_NM):
 
     # Read the discontinuity radius information.
     path_discon_info = os.path.join(dir_PM, 'radii.txt')
-    r_discons, state_inner = read_discon_file(path_discon_info)
+    r_discons, state_outer = read_discon_file(path_discon_info)
     n_discons = len(r_discons)
 
     # Read lists of indices of samples in interior regions and on discontinuities.
     index_lists = read_index_lists(dir_NM) 
 
-    return nodes, node_idxs, node_attbs, r_discons, state_inner, n_discons, index_lists 
+    return nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists 
 
 def get_eigvec_path_base(dir_NM):
 
@@ -796,7 +796,7 @@ def find_r_max(nodes, node_idxs, eigvec, index_lists, r_min = None):
 
     Input
 
-    eigvec, node_attbs, node_idxs, nodes, r_surface, r_discons, state_inner, boundary_tol
+    eigvec, node_attbs, node_idxs, nodes, r_surface, r_discons, state_outer, boundary_tol
         See 'Definitions of variables'.
     
     r_min   A minimum radius. Points inside this radius will be ignored. If 'default', the minimum radius will be 10% of the outer radius.
@@ -1243,7 +1243,7 @@ def vsh_projection_quick_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base
     dir_processed = os.path.join(dir_NM, 'processed')
 
     # Read various information about the mesh.
-    nodes, node_idxs, node_attbs, r_discons, state_inner, n_discons, index_lists = \
+    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists = \
             read_info_for_projection(dir_PM, dir_NM)
 
     # Do the projection. 
@@ -1257,7 +1257,7 @@ def vsh_projection_quick_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, save
     dir_processed = os.path.join(dir_NM, 'processed')
 
     # Read various information about the mesh.
-    nodes, node_idxs, node_attbs, r_discons, state_inner, n_discons, index_lists = \
+    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists = \
             read_info_for_projection(dir_PM, dir_NM)
 
     # Get a list of modes.
@@ -1279,7 +1279,7 @@ def vsh_projection_quick_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, save_
     dir_processed = os.path.join(dir_NM, 'processed')
 
     # Read various information about the mesh.
-    nodes, node_idxs, node_attbs, r_discons, state_inner, n_discons, index_lists = \
+    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists = \
             read_info_for_projection(dir_PM, dir_NM)
 
     # Get a list of modes.
