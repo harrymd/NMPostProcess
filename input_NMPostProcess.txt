@@ -1,5 +1,21 @@
-/Users/hrmd_work/Documents/research/stoneley/output/PlanetaryModels/LLSVP/prem_0439.4_2.00_1/
-/Users/hrmd_work/Documents/research/stoneley/output/NormalModes/prem_0439.4_2.00_1_00.10_01.00_1/
+/Users/hrmd_work/Documents/research/stoneley/output/PlanetaryModels/LLSVP/prem_spheroid_0439.4_2.00_1/
+/Users/hrmd_work/Documents/research/stoneley/output/NormalModes/prem_spheroid_0439.4_2.00_1_00.10_01.00_1/
 quick
 10
 all
+
+# Anything below is ignored.
+
+# PREM spheroid inputs. 
+/Users/hrmd_work/Documents/research/stoneley/output/PlanetaryModels/LLSVP/prem_spheroid_0439.4_2.00_1/
+/Users/hrmd_work/Documents/research/stoneley/output/NormalModes/prem_spheroid_0439.4_2.00_1_00.10_01.00_1/
+quick
+10
+all
+
+# Saturn polytrope inputs.
+/Users/hrmd_work/Documents/research/gas_giants/data/inputs/Polytrope/sat_m5_ntess_5_pOrder_1/
+/Users/hrmd_work/Documents/research/gas_giants/data/outputs/Polytrope/sat_m5_ntess_5_pOrder_1/
+quick
+10
+1

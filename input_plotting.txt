@@ -1,4 +1,7 @@
-spectral
-all
+spatial
+1
 png
 90
+
+
+# The lines below are ignored.

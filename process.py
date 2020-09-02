@@ -153,6 +153,7 @@ import os
 # Import third-party modules
 import numpy as np
 from scipy.interpolate import LinearNDInterpolator 
+from scipy.spatial import ConvexHull
 import shtns
 import ssrfpy
 
@@ -160,13 +161,13 @@ import ssrfpy
 from common import get_list_of_modes_from_output_files, mkdir_if_not_exist, read_eigenvalues
 
 # Pre-processing steps (only performed once for a given run). -----------------
-def write_eigenvalues(file_std_out, file_eigval_list = None): 
+def write_eigenvalues_from_std_out_file(path_std_out, path_eigval_list = None): 
     '''
     Reads the eigenvalues (frequencies) from standard output file from the NormalModes code and (optionally) saves them in a separate file. 
 
     Input
 
-    file_std_out, file_eigval_list (optional)
+    path_std_out, path_eigval_list (optional)
         See 'Definitions of variables'.
 
     Returns
@@ -176,7 +177,7 @@ def write_eigenvalues(file_std_out, file_eigval_list = None):
 
     # Skip lines until the relevant section is reached. 
     target_line = 'Transform to frequencies (mHz), and periods (s)' 
-    with open(file_std_out, 'r') as in_id: 
+    with open(path_std_out, 'r') as in_id: 
          
         for line in in_id:
             
@@ -201,16 +202,33 @@ def write_eigenvalues(file_std_out, file_eigval_list = None):
             line = in_id.readline().split()
             
     # Write to eigenvalue file (if requested).
-    if file_eigval_list is not None:
+    if path_eigval_list is not None:
         
-        print('Writing eigenvalue list file {:}'.format(file_eigval_list))
-        with open(file_eigval_list, 'w') as out_id:
+        print('Writing eigenvalue list file {:}'.format(path_eigval_list))
+        with open(path_eigval_list, 'w') as out_id:
             
             for n, f in zip(i_mode, freq):
                 
                 out_id.write('{:10d} {:16.9f}\n'.format(n, f))
                 
     return i_mode, freq
+
+def write_eigenvalues_from_eigs_txt_file(path_eigs_txt, path_eigval_list):
+
+    omega_squared = np.loadtxt(path_eigs_txt)
+    f = np.sqrt(omega_squared)/(2.0*np.pi)
+    f_mHz = f*1.0E3
+
+    n_modes = len(f_mHz)
+
+    print('Writing eigenvalue list file {:}'.format(path_eigval_list))
+    with open(path_eigval_list, 'w') as out_id:
+    
+        for i in range(n_modes):
+            
+            out_id.write('{:10d} {:16.9f}\n'.format(i + 1, f_mHz[i]))
+
+    return
 
 def read_discon_file(path_discon_info):
     '''
@@ -344,13 +362,121 @@ def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer,
 
     return index_lists_interior, index_lists_boundaries, index_lists
 
-def get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default'):
+def get_indices_of_regions_old(nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default'):
+    '''
+    For each region (outer surface, interior, and inner surface of each shell), find the indices of the samples belonging to that region.
+
+    Input:
+
+    See 'Definitions of variables.'
+
+    Output:
+
+    See 'Definitions of variables.'
+    '''
+    
+    # Get the radius of the surface and the number of discontinuities.
+    r_surface = r_discons[0]
+    n_discons = len(r_discons)
+
+    # Get the radial coordinates of the samples.
+    r_nodes = np.linalg.norm(nodes, axis = 1)
+    r_samples = r_nodes[node_idxs]
+
+    # Find nodes on the free surface.
+    i_shell = 0
+    is_outer = True
+    surface_condition, j_surface = get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer)
+
+    # Find all interior nodes (must remove the surface nodes).
+    interior_condition = (((node_attbs == 0) | (node_attbs == 1)) & ~surface_condition)
+    j_interior_sample = np.where(interior_condition)[0]
+
+    # Case 1: There are no interior discontinuities.
+    if n_discons == 1:
+        
+        # Find samples inside the object.
+        index_lists_interior = [j_interior_sample]
+        
+        # Find samples on the surface of the object.
+        index_lists_boundaries = [j_surface]
+
+    # Case 2: There are some interior discontinuities.
+    else:
+
+        # Initialise lists.
+        index_lists_interior = []
+        index_lists_boundaries = [j_surface]
+
+        # Make a list of boundaries of shells (r_surface, r1, r2, ..., 0.0).
+        r_discons_bounded = np.concatenate([r_discons, [0.0]])
+
+        # Find the indices of interior samples in each shell.
+        for i_shell in range(n_discons):
+            
+            # Find samples at the appropriate radial distance.
+            radius_condition = ((r_samples < r_discons_bounded[i_shell]) & (r_samples > r_discons_bounded[i_shell + 1]))
+
+            # Apply the radial condition and the interior node attribute condition.
+            shell_condition = (radius_condition & interior_condition)
+            j_shell = np.where(shell_condition)[0]
+            
+            # Store.
+            index_lists_interior.append(j_shell)
+
+        # Find the indices of boundary samples in each shell.
+        for i_shell in range(n_discons):
+
+            # Loop over the outer and inner sides of each shell.
+            # The outer surface of the outer shell has already been found.
+            if i_shell == 0:
+
+                is_outer_list = [False]
+
+            elif (i_shell < (n_discons - 1)):
+
+                is_outer_list = [True, False]
+
+            # The innermost shell does not have an inner side.
+            else:
+
+                is_outer_list = [True]
+
+            for is_outer in is_outer_list:
+                
+                # Search for the boundary samples.
+                _, j_discon = get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default')
+
+                index_lists_boundaries.append(j_discon)
+
+    # Merge the lists into a single list.
+    # The list starts with the free surface and then the first interior region.
+    index_lists = [index_lists_boundaries[0], index_lists_interior[0]]
+    if len(index_lists_interior) > 1:
+
+        for i in range(1, len(index_lists_interior)):
+
+            # Between every interior region, there are two boundaries.
+            index_lists.append(index_lists_boundaries[2*i - 1])
+            index_lists.append(index_lists_boundaries[2*i])
+
+            # The next interior region.
+            index_lists.append(index_lists_interior[i])
+
+    return index_lists_interior, index_lists_boundaries, index_lists
+
+def get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default', surface_method = 'convhull'):
     '''
     Finds the samples of the eigvector which belong to a specified boundary.
     
     Input:
 
     See 'Definitions of variables.'
+
+    surface_method
+        A string specifying the method used to identify the samples on the outer surface. Currently, the supported options are
+            'convhull'  (Default.) Finds the nodes belonging to the convex hull of the mesh. This only yields all of the surface nodes if the surface mesh is convex.
+            'radius'    Uses the outer surface radius to find the samples on the surface. This only works if the surface is spherical.
 
     Output:
 
@@ -363,18 +489,38 @@ def get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_d
     # Case 1: The interface is the outer surface.
     if (i_shell == 0) and is_outer:
 
-        # Find radius of outer surface.
-        r_surface = r_discons[0]
+        # Find the points on the surface using the convex hull.
+        # This method only works if the surface is convex.
+        if surface_method == 'convhull':
+        
+            # Build complex hull.
+            hull = ConvexHull(nodes)
+            hull_indices = hull.simplices
 
-        # Set default value of comparison tolerance for boundaries.
-        if boundary_tol == 'default':
+            hull_indices = np.unique(hull_indices.flatten())
 
-            boundary_tol = r_surface*1.0E-7
+            condition = np.array([i in hull_indices for i in node_idxs], dtype = np.int)
 
-        # Find indices of allowed nodes, and discard other nodes
-        r_samples = np.linalg.norm(nodes[node_idxs], axis = 1)
-        r_min = r_surface - boundary_tol
-        condition = (r_samples > r_min)
+        # Find the points on the surface based on their radial coordinate.
+        # This method only works if the surface is a sphere.
+        elif surface_method == 'radius':
+
+            # Find radius of outer surface.
+            r_surface = r_discons[0]
+
+            # Set default value of comparison tolerance for boundaries.
+            if boundary_tol == 'default':
+
+                boundary_tol = r_surface*1.0E-7
+
+            # Find indices of allowed nodes, and discard other nodes
+            r_samples = np.linalg.norm(nodes[node_idxs], axis = 1)
+            r_min = r_surface - boundary_tol
+            condition = (r_samples > r_min)
+
+        else:
+
+            raise ValueError('Method for detecting surface nodes ({:}) was not recognised. Options are \'convhull\' and \'radius\'')
 
     # Case 2: The interface is an internal fluid-solid boundary.
     else:
@@ -433,30 +579,43 @@ def pre_process(dir_PM, dir_NM):
         mkdir_if_not_exist(dir_)
 
     # Write the eigenvalue file if it doesn't already exist.
-    file_eigval_list    = os.path.join(dir_processed, 'eigenvalue_list.txt')
-    if not os.path.exists(file_eigval_list):
+    path_eigval_list    = os.path.join(dir_processed, 'eigenvalue_list.txt')
+    if not os.path.exists(path_eigval_list):
         
         # Search for the standard output file, which contains the eigenvalue information.
         #file_std_out_wc = os.path.join(dir_NM, '{:}*.txt'.format(std_out_prefix))
-        file_std_out_wc = os.path.join(dir_NM, '*.txt')
-        file_std_out_glob = glob(file_std_out_wc)
-        n_glob = len(file_std_out_glob)
+        path_eigs_wc = os.path.join(dir_NM, '*.txt')
+        path_eigs_glob = glob(path_eigs_wc)
+        n_glob = len(path_eigs_glob)
         if n_glob == 0:
 
-            raise FileNotFoundError('Could not find any files matching {}'.format(file_std_out_wc))
+            raise FileNotFoundError('Could not find any paths matching {} for eigenvalue information.'.format(path_eigs_wc))
 
         elif n_glob > 1:
             
-            raise RuntimeError('Found more than one file matching {}'.format(file_std_out_wc))
+            raise RuntimeError('Found more than one path matching {}, not clear which contains eigenvalue information.'.format(path_eigs_wc))
 
-        file_std_out = file_std_out_glob[0]
+        path_eigs = path_eigs_glob[0]
+    
+        # Case 1: The eigenvalue log ends in eigs.txt.
+        if path_eigs[-8:-4] == 'eigs':
 
-        # Read the standard output file and write the eigenvalue file.
-        write_eigenvalues(file_std_out, file_eigval_list = file_eigval_list)
+            path_eig_txt = path_eigs
+            write_eigenvalues_from_eigs_txt_file(path_eig_txt, path_eigval_list)
+
+        # Case 2: The eigenvalue log ends in seven integers then .txt (the format of a standard output file). 
+        elif all([character in list('0123456789') for character in list(path_eigs[-11:-4])]):
+
+            path_std_out = path_eigs
+            write_eigenvalues_from_std_out_file(path_std_out, path_eigval_list = path_eigval_list)
+        
+        else:
+
+            raise RunTimeError('The name of the raw eigenvalue log file ({:}) does not match any known formats.'.format(path_eigs))
 
     else:
 
-        print('Eigenvalue list file {:} already exists. Skipping creation.'.format(file_eigval_list))
+        print('Eigenvalue list file {:} already exists. Skipping creation.'.format(path_eigval_list))
 
     # Write the nodes file if it doesn't already exist.
     # This file is simply a re-written version of some of the TetGen output, for convenience.
