@@ -131,7 +131,7 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
     # Create axes (if none are supplied).
     if ax is None:
 
-        fig = plt.figure(figsize = (5.0, 5.0))
+        fig = plt.figure(figsize = (5.0, 5.0), tight_layout = True)
         ax = plt.gca()
 
     # Loop over the different kinds of mode.
@@ -157,8 +157,9 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
     plt.legend()
 
     # Axis labels.
-    ax.set_xlabel('Angular order, $\ell$')
-    ax.set_ylabel('Frequency (mHz)')
+    fontsize_label = 12
+    ax.set_xlabel('Angular order, $\ell$', fontsize = fontsize_label)
+    ax.set_ylabel('Frequency (mHz)', fontsize = fontsize_label)
 
     # Save figure (if requested).
     if path_fig is not None:

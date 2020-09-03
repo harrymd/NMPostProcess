@@ -12,7 +12,7 @@ import os
 import numpy as np
 
 # Import local modules.
-from common import get_list_of_modes_from_output_files, load_vsh_coefficients, make_l_and_m_lists
+from common import get_list_of_modes_from_coeff_files, load_vsh_coefficients, make_l_and_m_lists
 
 # Characterisation of modes based on their VSH coefficients. ------------------
 def calculate_power_distribution(Ulm, Vlm, Wlm, l_list, print_ = True):
@@ -64,7 +64,8 @@ def calculate_power_distribution(Ulm, Vlm, Wlm, l_list, print_ = True):
 def characterise_all_modes_quick(dir_NM): 
 
     # Get a list of modes.
-    i_mode_list = get_list_of_modes_from_output_files(dir_NM)
+    #i_mode_list = get_list_of_modes_from_output_files(dir_NM)
+    i_mode_list = get_list_of_modes_from_coeff_files(dir_NM)
     n_modes = len(i_mode_list)
 
     # Define directories.

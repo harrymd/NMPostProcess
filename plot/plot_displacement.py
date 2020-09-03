@@ -6,6 +6,7 @@ Plots spatial and spectral representation of vector-spherical-harmonic fields.
 # Import modules. -------------------------------------------------------------
 
 # Core modules.
+from glob import glob
 import os
 
 # Third-party modules.
@@ -20,7 +21,7 @@ import  numpy                   as      np
 import  shtns
 
 # Local modules.
-from common         import convert_complex_sh_to_real, get_list_of_modes_from_output_files, load_vsh_coefficients, make_l_and_m_lists, mkdir_if_not_exist
+from common         import convert_complex_sh_to_real, get_list_of_modes_from_coeff_files, load_vsh_coefficients, make_l_and_m_lists, mkdir_if_not_exist
 from process        import project_from_spherical_harmonics 
 
 def region_int_to_title(region, radius, shell_name_path = None):
@@ -105,8 +106,8 @@ def plot_sh_disp_all_modes(dir_NM, n_lat_grid, fmt = 'pdf'):
     '''
 
     # Get a list of mode IDs to plot.
-    mode_list = get_list_of_modes_from_output_files(dir_NM)
-    
+    mode_list = get_list_of_modes_from_coeff_files(dir_NM)
+
     # Plot the modes one by one.
     for i_mode in mode_list:
 
@@ -157,10 +158,21 @@ def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, show = True, fmt = 'pdf'):
     # Expand the VSH into spatial components.
     U_r, V_e, V_n, W_e, W_n = project_from_spherical_harmonics(sh_calculator, Ulm, Vlm, Wlm)
 
+    #fig = plt.figure()
+    #ax = plt.gca()
+
+    #im = ax.imshow(U_r)
+    #fig.colorbar(im)
+
+    #plt.show()
+
+    #import sys
+    #sys.exit()
+
     # Plot.
     # The contourf() function can suffer an error when the input is almost flat (e.g. plotting the toroidal component of a spheroidal mode). To avoid this error, we reduce the number of contour levels.
-    n_c_levels_default = 11 
-    n_c_levels_fallback = 6
+    n_c_levels_default = 20 
+    n_c_levels_fallback = 10 
     try:
 
         plot_sh_disp_3_comp(lon_grid, lat_grid, U_r, V_e, V_n, W_e, W_n, ax_arr = None, show = False, title = title, n_c_levels = n_c_levels_default)
@@ -190,7 +202,7 @@ def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, show = True, fmt = 'pdf'):
 
     return
 
-def plot_sh_disp(lon_grid, lat_grid, v_r = None, v_n = None, v_e = None, ax = None, ax_cbar = None, n_c_levels = 21):
+def plot_sh_disp(lon_grid, lat_grid, v_r = None, v_n = None, v_e = None, ax = None, ax_cbar = None, n_c_levels = 20):
     '''
     Plots the displacement pattern of a radial or tangential vector field on surface of a sphere. If the field is purely radial, the plot shows the magnitude and sign of the displacement. If the field is purely tangential, the plot shows the absolute value of the displacement, with arrows showing the direction.
 
@@ -239,10 +251,15 @@ def plot_sh_disp(lon_grid, lat_grid, v_r = None, v_n = None, v_e = None, ax = No
         v_scalar = np.sqrt((v_e**2.0) + (v_n**2.0))
 
     # Define the colour map.
-    c_interval          = 0.1
+    #c_interval          = 0.1
     c_min               = -1.0
     c_max               =  1.0
     c_levels      = np.linspace(c_min, c_max, num = n_c_levels)
+    half_n_c_levels = n_c_levels//2
+    c_levels_pos = np.linspace(0.0, c_max, num = (half_n_c_levels + 1))[1:]
+    c_levels_neg = -1.0*c_levels_pos[::-1]
+    c_levels = np.concatenate([c_levels_neg, c_levels_pos])
+
     # 
     c_norm    = mpl.colors.Normalize(
                         vmin = c_min,
@@ -292,7 +309,8 @@ def plot_sh_disp(lon_grid, lat_grid, v_r = None, v_n = None, v_e = None, ax = No
         c_bar = plt.colorbar(
                     conts,
                     cax         = ax_cbar,
-                    orientation = 'horizontal')
+                    orientation = 'horizontal',
+                    ticks = MultipleLocator(0.5))
         #c_bar.set_label('Magnitude of displacement', fontsize = 12)
         c_bar.set_label('Displacement', fontsize = 12)
     
@@ -317,7 +335,8 @@ def plot_sh_disp_3_comp(lon_grid, lat_grid, U_r, V_e, V_n, W_e, W_n, ax_arr = No
     if ax_arr is None:
         
         # Create the axes.
-        projection = ccrs.Mollweide()
+        #projection = ccrs.Mollweide()
+        projection = ccrs.Robinson()
         fig = plt.figure(figsize = (3.5, 6.0))
         axes_class = (GeoAxes, dict(map_projection = projection))
         ax_arr = AxesGrid(fig, 111,
@@ -360,7 +379,8 @@ def plot_sh_real_coeffs_3_comp_all_modes(dir_NM, fmt = 'pdf'):
     A wrapper for plot_sh_real_coeffs_3_comp_wrapper().
     '''
 
-    mode_list = get_list_of_modes_from_output_files(dir_NM)
+    #mode_list = get_list_of_modes_from_output_files(dir_NM)
+    mode_list = get_list_of_modes_from_coeff_files(dir_NM)
     
     for i_mode in mode_list:
 

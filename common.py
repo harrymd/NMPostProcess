@@ -56,6 +56,35 @@ def read_eigenvalues(file_eigval_list):
     
     return num, freq
 
+def get_list_of_modes_from_regex(path_regex):
+
+    path_list = glob(path_regex)
+    #
+    i_mode_list = []
+    for path in path_list:
+
+        # Remove .dat suffix.
+        path = path[:-4]
+
+        # Get integer at end of file name.
+        try:
+
+            i_mode = int(path.split('_')[-1])
+        
+            # Save.
+            i_mode_list.append(i_mode)
+
+        # Ignore other files e.g. *_vlist.dat which do not end with integers. 
+        except ValueError:
+
+            pass
+
+    # Convert to NumPy array and sort.
+    i_mode_list = np.array(i_mode_list, dtype = np.int)
+    i_mode_list = np.sort(i_mode_list)
+
+    return i_mode_list
+
 def get_list_of_modes_from_output_files(dir_NM):
     '''
     Searches output directory for matching filenames and returns a list of mode IDs.
@@ -73,30 +102,15 @@ def get_list_of_modes_from_output_files(dir_NM):
 
     regex_eigvec = '*.dat'
     path_regex_eigvec = os.path.join(dir_NM, regex_eigvec)
-    eigvec_path_list = glob(path_regex_eigvec)
-    #
-    i_mode_list = []
-    for eigvec_path in eigvec_path_list:
+    i_mode_list = get_list_of_modes_from_regex(path_regex_eigvec)
 
-        # Remove .dat suffix.
-        eigvec_path = eigvec_path[:-4]
+    return i_mode_list
 
-        # Get integer at end of file name.
-        try:
+def get_list_of_modes_from_coeff_files(dir_NM):
 
-            i_mode = int(eigvec_path.split('_')[-1])
-        
-            # Save.
-            i_mode_list.append(i_mode)
-
-        # Ignore other files e.g. *_vlist.dat which do not end with integers. 
-        except ValueError:
-
-            pass
-
-    # Convert to NumPy array and sort.
-    i_mode_list = np.array(i_mode_list, dtype = np.int)
-    i_mode_list = np.sort(i_mode_list)
+    regex_coeffs = '*spectral*.npy'
+    path_regex_coeffs = os.path.join(dir_NM, 'processed', 'spectral', regex_coeffs)
+    i_mode_list = get_list_of_modes_from_regex(path_regex_coeffs)
 
     return i_mode_list
 

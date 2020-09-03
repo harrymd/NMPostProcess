@@ -1,5 +1,5 @@
 spatial
-15
+all
 png
 90
 
