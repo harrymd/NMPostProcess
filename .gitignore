@@ -1,2 +1,5 @@
 old/
 __pycache__/
+NMPP*.txt
+NMPP*.err
+run_NMPP.sbatch

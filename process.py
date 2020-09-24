@@ -161,7 +161,7 @@ import shtns
 import ssrfpy
 
 # Import local modules.
-from common import get_list_of_modes_from_output_files, mkdir_if_not_exist, read_eigenvalues
+from common import get_list_of_modes_from_output_files, mkdir_if_not_exist, read_eigenvalues, read_input_NMPostProcess
 
 # Pre-processing steps (only performed once for a given run). -----------------
 def write_eigenvalues_from_std_out_file(path_std_out, path_eigval_list = None): 
@@ -1731,7 +1731,9 @@ def get_sampling_radii(r_discons, n_radii):
 
     if n_discons == 1:
 
-        raise NotImplementedError
+        r_sample = np.linspace(r_srf, r_inner, num = n_radii)
+        i_sample = np.zeros(n_radii, dtype = np.int) + 1
+        i_sample[0] = 0
 
     else:
 
@@ -1785,31 +1787,31 @@ def get_sampling_radii(r_discons, n_radii):
             i_best = np.argmin(variance)
             n_points_per_shell[i_best] = n_points_per_shell[i_best] + 1
 
-    # Calculate the sample points.
-    r_sample_list = []
-    i_sample_list = []
-    for i in range(n_shell):
-        
-        r_shell_inner = r_shell[i + 1]
-        r_shell_outer = r_shell[i]
+        # Calculate the sample points.
+        r_sample_list = []
+        i_sample_list = []
+        for i in range(n_shell):
+            
+            r_shell_inner = r_shell[i + 1]
+            r_shell_outer = r_shell[i]
 
-        r_sample_list.append(np.linspace(r_shell_outer, r_shell_inner, num = n_points_per_shell[i]))
+            r_sample_list.append(np.linspace(r_shell_outer, r_shell_inner, num = n_points_per_shell[i]))
 
-        i_sample_outer_i = 3*i
-        i_sample_interior_i = 3*i + 1 
-        i_sample_inner_i = 3*i + 2
+            i_sample_outer_i = 3*i
+            i_sample_interior_i = 3*i + 1 
+            i_sample_inner_i = 3*i + 2
 
-        i_sample_i = np.zeros(n_points_per_shell[i], dtype = np.int) + i_sample_interior_i
-        i_sample_i[0] = i_sample_outer_i
+            i_sample_i = np.zeros(n_points_per_shell[i], dtype = np.int) + i_sample_interior_i
+            i_sample_i[0] = i_sample_outer_i
 
-        if i < (n_shell - 1):
+            if i < (n_shell - 1):
 
-            i_sample_i[-1] = i_sample_inner_i
+                i_sample_i[-1] = i_sample_inner_i
 
-        i_sample_list.append(i_sample_i)
+            i_sample_list.append(i_sample_i)
 
-    r_sample = np.concatenate(r_sample_list)
-    i_sample = np.concatenate(i_sample_list)
+        r_sample = np.concatenate(r_sample_list)
+        i_sample = np.concatenate(i_sample_list)
 
     return r_sample, i_sample
 
@@ -1969,7 +1971,6 @@ def vsh_projection_full_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, n_radi
 
     # Get a list of modes.
     i_mode_list = get_list_of_modes_from_output_files(dir_NM)
-    i_mode_list = [1, 2]
 
     # Open a parallel pool.
     n_processes = multiprocessing.cpu_count()  
