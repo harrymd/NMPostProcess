@@ -84,9 +84,9 @@ The file `input_NMPostProcess.txt` controls the post-processing. The first three
 An example of the first three lines of the  *NMPostProcess* input file is here:
 
 ```
-/example/output/PlanetaryModels/LLSVP/prem_0439.4_2.00_1/
-/example/output/NormalModes/prem_0439.4_2.00_1_00.10_01.00_1/
-quick
+/example/model_dir/		# Directory containing model files.
+/example/eigvec_dir/	# Directory containing eigenvector files.
+quick					# Option ('quick' or 'full').
 ...
 ```
 
@@ -117,7 +117,6 @@ with the following input file (comments should be removed)
 quick					# Option ('quick' or 'full').
 10						# l_max (maximum angular order, must be integer).
 15 						# i_mode (mode ID: integer, 'all', or 'parallel').
-# Any further lines are ignored (but see 'full projection'). 
 ```
 
 Notice that the mode number can also be set as `all` to loop over all modes (this can be slow for large runs) or `parallel` to loop over all modes using all available cores.
@@ -159,13 +158,12 @@ A spatial plot input file looks like this
 
 ```
 quick		# Option: 'quick' for quick-mode plots.
-spatial 	# 'spatial' or 'spectral'.
+spatial 90 	# 'spatial n_lat' or 'spectral'.
 15			# i_mode: The mode ID (integer or 'all').
 png			# Figure output format ('png' or 'pdf').
-90			# n_lat: Points in latitude grid (ignored for spectral).
 ```
 
-where the second line is the mode number (can also be `all`), the third line is the output figure format (currently supports `png` and `pdf`), and fourth line is the number of latitude grid points (see discussion in 'Using the code: Quick projection'). The spatial field is calculated by re-projecting the VSH coefficients.
+where the first line is the type of processing (`quick` or `full`), the second line is the plot type (`spatial` or `spectral`) and the number of latitude grid points (only used for `spatial`; see discussion in 'Using the code: Quick projection' for finding the appropriate number of points), the third line is the mode number (can also be `all`), and fourth line is the output figure format (currently supports `png` and `pdf`). The spatial field is calculated by re-projecting the VSH coefficients.
 
 The figure title gives the radial coordinate of the projection (the radius at which the maximum displacement occurs). An optional file `shell_names.txt` can be placed in the `processed/` directory to give more descriptive names to the regions between solid-fluid discontinuities. For example, for Earth (with no crust), an appropriate shell-name file is
 
@@ -180,10 +178,10 @@ inner core
 For the same example as above, if we change the plot input file to 
 
 ```
-spectral
-15
-png
-90 # Note that last line is ignored for spectral plots.
+quick		# Option: 'quick' for quick-mode plots.
+spectral 	# 'spatial n_lat' or 'spectral'.
+15			# i_mode: The mode ID (integer or 'all').
+png			# Figure output format ('png' or 'pdf').
 ```
 
 we get a spectral plot:
@@ -250,19 +248,30 @@ The mode clustering information can be helpful for identifying numerical errors 
 
 'Full projection' calculates VSH coefficients on spherical surfaces with various radii from the centre of the planet to the surface, instead of the one radius used in quick projection. This means that full projection is slower, but it provides a full description of the mode displacement field throughout the planet. This can give more robust mode identifications.
 
-Using 'full projection' is very similar to 'quick projection'. The only differences are in the input file (`input_NMPostProcess.txt`). The third line must be changed to `full` and an additional (sixth) line must be added with the number of radii to use. For example:
+Using 'full projection' is very similar to 'quick projection'. The only differences are in the input file (`input_NMPostProcess.txt`). The third line must be changed to `full n_radii` where `n_radii` is the number of radial sampling points. For example:
 
 ```
-/example/model_dir/ # 
-/example/data_dir/ 	#
-full
-10
-15
-20
+/example/model_dir/		# Directory containing model files.
+/example/eigvec_dir/	# Directory containing eigenvector files.
+full 20					# Option and number of radii (integer).
+10						# l_max (maximum angular order, must be integer).
+15 						# i_mode (mode ID: integer, 'all', or 'parallel').
 ```
 
-will run a full projection at 20 radii. The code will choose the radii to be as evenly-distributed as possible, with at least three radii in each shell (one at the outer boundary, one at the inner boundary, and one within the shell).
+will run a full projection at 20 radii for mode 15. The code will choose the radii to be as evenly-distributed as possible, with at least three radii in each shell (one at the outer boundary, one at the inner boundary, and one within the shell).
 
+### Plotting 'full projection' results
+
+Plotting displacement maps and coefficients is very similar to 'quick projection', except that you must also specify the integer ID of the radial 'slice' you wish to plot (or use 'all' to plot all the slices). So, for example, the following input file
+
+```
+full all	# Option and radius ID (integer or all).
+spatial 90 	# 'spatial n_lat' or 'spectral'.
+15			# i_mode: The mode ID (integer or 'all').
+png			# Figure output format ('png' or 'pdf').
+```
+
+would produce a full-projection spatial plot for mode 15 at all of the radial slices defined during the processing step. Note that the mode ID can also be 'all', but this will take a long time. As before, changing 'spatial' to 'spectral' will yield a spectral plot for each specified depth slice.
 
 <a href="#top">Back to top</a>
 
@@ -272,7 +281,7 @@ will run a full projection at 20 radii. The code will choose the radii to be as 
 
 The calculation of the VSH coefficients of one mode is independent of the calculation of the coefficients of any other mode. Therefore, it is straightforward to process all of the modes in parallel. This speeds up the calculation, which is especially useful for 'full projection'.
 
-To use parallel processing, change the fifth line of `input_NMPostProcess.txt` from `all` to `parallel`.
+As mentioned before, to use parallel processing, change the fifth line of `input_NMPostProcess.txt` from `all` to `parallel`.
 
 Parallel processing is often more effective if you have access to a cluster with many cores. An example job script is given in `example_slurm.sbatch` for a [*Slurm*](https://slurm.schedmd.com/documentation.html) cluster. This script would be submitted to the cluster with the command `sbatch example_slurm.sbatch`. The script is very simple, but you must also make sure that the *NMPostProcesss* file is correct, the required *Python* modules are available on the cluster, and any local cluster rules are obeyed.
 
@@ -326,13 +335,13 @@ and other times it will fail to draw some contour levels without raising an erro
 
 ## Contributors and version history
 
-* Version 1: Created by [Harry Matchette-Downes](http://web.mit.edu/hrmd/www/home.html). Includes 'quick' processing, and plotting of maps, spectra and mode diagrams.
+* Version 1: 1st August 2020: Created by [Harry Matchette-Downes](http://web.mit.edu/hrmd/www/home.html). Includes 'quick' processing, and plotting of maps, spectra and mode diagrams.
+* Version 2: 24th September 2020: Added 'full' projection.
 
 ### Future
 
 We intend to add the following features:
 
-* Full projection.
 * Support for spheroidal (flattened) planets.
 
 <a href="#top">Back to top</a>
