@@ -106,15 +106,26 @@ def get_list_of_modes_from_output_files(dir_NM):
 
     return i_mode_list
 
-def get_list_of_modes_from_coeff_files(dir_NM):
+def get_list_of_modes_from_coeff_files(dir_NM, option):
+    
+    if option == 'quick':     
 
-    regex_coeffs = '*spectral*.npy'
+        regex_coeffs = 'quick_spectral_[0-9][0-9][0-9][0-9][0-9].npy' 
+
+    elif option == 'full':
+
+        regex_coeffs = 'full_spectral_[0-9][0-9][0-9][0-9][0-9].npy' 
+
+    else:
+
+        raise ValueError
+
     path_regex_coeffs = os.path.join(dir_NM, 'processed', 'spectral', regex_coeffs)
-    i_mode_list = get_list_of_modes_from_regex(path_regex_coeffs)
+    i_mode_list = get_list_of_modes_from_regex(path_regex_coeffs) 
 
     return i_mode_list
 
-def load_vsh_coefficients(dir_NM, i_mode):
+def load_vsh_coefficients(dir_NM, i_mode, i_radius = None):
     '''
     Loads the vector spherical harmonic coefficients created by NMPostProcess/process.py.
 
@@ -132,23 +143,116 @@ def load_vsh_coefficients(dir_NM, i_mode):
     # Create the file path and load the NumPy array.
     dir_processed = os.path.join(dir_NM, 'processed')
     dir_spectral = os.path.join(dir_processed, 'spectral')
-    file_spectral_data = 'quick_spectral_{:>05d}.npy'.format(i_mode)
+
+    # Infer whether the coefficients are 'quick' or 'full'
+    if i_radius is None:
+
+        option = 'quick'
+
+    else:
+
+        option = 'full'
+
+    # Load the coefficients.
+    # For 'quick' mode, there is a singleton dimension which can be
+    # removed with 'squeeze'.
+    file_spectral_data = '{:}_spectral_{:>05d}.npy'.format(option, i_mode)
     path_spectral_data = os.path.join(dir_spectral, file_spectral_data)
-    spectral_data = np.load(path_spectral_data)
+    coeffs = np.squeeze(np.load(path_spectral_data))
 
-    # Read the first header line to get the radius information.
-    header_radius       = np.real(spectral_data[:, 0])
-    r_max               = header_radius[0]
-    i_region_max        = int(header_radius[1])
+    # Load the header.
+    file_header = '{:}_spectral_header_{:05d}.npy'.format(option, i_mode)
+    path_header = os.path.join(dir_spectral, file_header)
+    header = np.load(path_header) 
+    n_radii = (len(header) - 3)//2
+    header_info = dict()
+    header_info['eigvec_max']   = header[0]
+    header_info['r_max']        = header[1]
+    header_info['i_region_max'] = int(header[2])
+    header_info['r_sample']     = np.array(header[3              : 3 +   n_radii])
+    header_info['i_sample']     = header[3 + n_radii    : 3 + 2*n_radii]
+    header_info['i_sample']     = np.array(header_info['i_sample'], dtype = np.int)
 
-    # Read the second header line to get the scale information.
-    header_scale = np.real(spectral_data[:, 1])
-    scale = header_scale[0]
+    if option == 'full':
 
-    # Read the coefficients.
-    Ulm, Vlm, Wlm = spectral_data[:, 2:]
+        if i_radius == 'all':
 
-    return Ulm, Vlm, Wlm, scale, r_max, i_region_max
+            return coeffs, header_info
+
+        coeffs = coeffs[i_radius, ...]
+        i_sample = header_info['i_sample'][i_radius]
+        r_sample = header_info['r_sample'][i_radius]
+
+    else:
+
+        i_sample = header_info['i_sample'][0]
+        r_sample = header_info['r_sample'][0]
+
+    Ulm, Vlm, Wlm = coeffs
+
+    return Ulm, Vlm, Wlm, r_sample, i_sample, header_info 
+
+def read_input_NMPostProcess():
+
+    # Read the input file.
+    input_file = 'input_NMPostProcess.txt'
+    with open(input_file, 'r') as in_id:
+
+        input_args = in_id.readlines()
+    
+    # Parse input arguments.
+    # Remove trailing newline characters.
+    input_args = [x.strip().split() for x in input_args]
+    #
+    dir_PM      = input_args[0][0]
+    dir_NM      = input_args[1][0]
+    option      = input_args[2][0]
+    if option == 'full':
+
+        n_radii = int(input_args[2][1])
+    
+    else:
+
+        n_radii = None
+
+    l_max       = int(input_args[3][0])
+    i_mode_str  = input_args[4][0]
+
+    return dir_PM, dir_NM, option, l_max, i_mode_str, n_radii 
+
+def read_input_plotting():
+
+    # Read the plotting input file.
+    plot_input_file = 'input_plotting.txt'
+    with open(plot_input_file, 'r') as in_id:
+
+        plot_input_args = in_id.readlines()
+    
+    # Parse input arguments.
+    # Remove trailing newline characters.
+    plot_input_args = [x.strip().split() for x in plot_input_args]
+    option          = plot_input_args[0][0] 
+    if option == 'full':
+        
+        i_radius_str = plot_input_args[0][1]
+    
+    else:
+
+        i_radius_str = None
+
+    plot_type       = plot_input_args[1][0]
+    if plot_type == 'spatial':
+        
+        n_lat_grid = int(plot_input_args[1][1])
+
+    else:
+
+        n_lat_grid = None
+
+    i_mode_str      = plot_input_args[2][0]
+    fmt             = plot_input_args[3][0]
+
+    return option, i_radius_str, i_mode_str, fmt, n_lat_grid
 
 # Functions related to spherical harmonics.
 def convert_complex_sh_to_real(Xlm, l_max):

@@ -236,19 +236,9 @@ def plot_mode_diagram_wrapper(dir_NM):
 def main():
 
     # Read the NMPostProcess input file.
-    input_file = 'input_NMPostProcess.txt'
-    with open(input_file, 'r') as in_id:
+    dir_PM, dir_NM, option, l_max, i_mode_str, n_radii = read_input_NMPostProcess()
 
-        input_args = in_id.readlines()
-    
-    # Parse input arguments.
-    # Remove trailing newline characters.
-    input_args = [x.strip() for x in input_args]
-    #dir_PM      = input_args[0]
-    dir_NM      = input_args[1]
-    #option      = input_args[2]
-    #l_max       = int(input_args[3])
-
+    # Plot the mode diagram.
     plot_mode_diagram_wrapper(dir_NM)
 
 if __name__ == '__main__':

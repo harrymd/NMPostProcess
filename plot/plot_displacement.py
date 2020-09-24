@@ -73,15 +73,19 @@ def region_int_to_title(region, radius, shell_name_path = None):
 
     return title
 
-def save_figure(path_fig, fmt):
+def save_figure(path_fig, fmt, transparent = False):
 
     if fmt == 'pdf':
+        
+        if transparent:
+
+            print('Warning: cannot save transparent figure with fmt = pdf')
 
         plt.savefig(path_fig)
 
     elif fmt == 'png':
 
-        plt.savefig(path_fig, dpi = 300)
+        plt.savefig(path_fig, dpi = 300, transparent = transparent)
 
     else:
 
@@ -90,7 +94,7 @@ def save_figure(path_fig, fmt):
     return
 
 # Plot displacement patterns. -------------------------------------------------
-def plot_sh_disp_all_modes(dir_NM, n_lat_grid, fmt = 'pdf'):
+def plot_sh_disp_all_modes(dir_NM, n_lat_grid, fmt = 'pdf', i_radius_str = None):
     '''
     For each mode, plots a vector field on the surface of a sphere in terms of the radial, consoidal and toroidal components.
     This is a wrapper for plot_sh_disp_wrapper().
@@ -104,20 +108,28 @@ def plot_sh_disp_all_modes(dir_NM, n_lat_grid, fmt = 'pdf'):
 
     None
     '''
+    
+    if i_radius_str is None:
+        
+        option = 'quick'
+
+    else:
+
+        option = 'full'
 
     # Get a list of mode IDs to plot.
-    mode_list = get_list_of_modes_from_coeff_files(dir_NM)
+    mode_list = get_list_of_modes_from_coeff_files(dir_NM, option)
 
     # Plot the modes one by one.
     for i_mode in mode_list:
 
         print('\nPlotting displacement for mode {:>5d}.'.format(i_mode))
 
-        plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, show = False, fmt = fmt)
+        plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, show = False, fmt = fmt, i_radius_str = i_radius_str)
 
     return
 
-def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, show = True, fmt = 'pdf'):
+def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, show = True, fmt = 'pdf', transparent = False, i_radius_str = None):
     '''
     Plots a vector field on the surface of a sphere in terms of the radial, consoidal and toroidal components.
     This is a wrapper for plot_sh_disp() which first loads the necessary arrays. 
@@ -132,73 +144,94 @@ def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, show = True, fmt = 'pdf'):
     None
     '''
 
+    # Set transparency.
+    transparent = True
+
+    # Define directories.
+    dir_processed = os.path.join(dir_NM, 'processed')
+    dir_spectral = os.path.join(dir_processed, 'spectral')
+    dir_plot = os.path.join(dir_processed, 'plots')
+    mkdir_if_not_exist(dir_plot)
+
+    # Determine if the plot is 'quick' mode or 'full' mode.
+    if i_radius_str is None:
+
+        option = 'quick'
+
+    else:
+
+        option = 'full'
+
     # Reconstruct the coordinate grid.
     n_lon_grid = (2*n_lat_grid) - 1
     lon_grid = np.linspace(0.0, 2.0*np.pi, n_lon_grid + 1, endpoint = True)[:-1]
     lat_grid = np.linspace(-np.pi/2.0, np.pi/2.0, n_lat_grid, endpoint=True)
 
-    # Load the VSH coefficients for the specified mode.
-    dir_processed = os.path.join(dir_NM, 'processed')
-    dir_spectral = os.path.join(dir_processed, 'spectral')
-    Ulm, Vlm, Wlm, scale, r_max, region_max = load_vsh_coefficients(dir_NM, i_mode)
-    title = region_int_to_title(region_max, r_max, shell_name_path = os.path.join(dir_processed, 'shell_names.txt'))
+    if i_radius_str == 'all':
 
-    # Infer the maximum l-value used.
-    n_coeffs = len(Ulm)
-    l_max = (int((np.round(np.sqrt(8*n_coeffs + 1)) - 1))//2) - 1
+        _, _, _, _, _, header_info = load_vsh_coefficients(dir_NM, i_mode, 0)
+        n_samples = len(header_info['r_sample'])
 
-    # Re-construct the shtns calculator.
-    m_max = l_max
-    sh_calculator   = shtns.sht(l_max, m_max)
-    grid_type       =       shtns.sht_reg_fast          \
-                        |   shtns.SHT_SOUTH_POLE_FIRST  \
-                        |   shtns.SHT_PHI_CONTIGUOUS
-    sh_calculator.set_grid(n_lat_grid, n_lon_grid, flags = grid_type)
+        i_radius_list = list(range(n_samples))
 
-    # Expand the VSH into spatial components.
-    U_r, V_e, V_n, W_e, W_n = project_from_spherical_harmonics(sh_calculator, Ulm, Vlm, Wlm)
+    elif i_radius_str is None:
 
-    #fig = plt.figure()
-    #ax = plt.gca()
+        i_radius_list = [None]
 
-    #im = ax.imshow(U_r)
-    #fig.colorbar(im)
+    else:
 
-    #plt.show()
+        i_radius_list = [int(i_radius_str)]
 
-    #import sys
-    #sys.exit()
+    first_iteration = True
+    for j_radius in i_radius_list:
+        
+        # Load the VSH coefficients for the specified mode.
+        Ulm, Vlm, Wlm, r_sample, i_sample, _ = load_vsh_coefficients(dir_NM, i_mode, j_radius)
+        title = region_int_to_title(i_sample, r_sample, shell_name_path = os.path.join(dir_processed, 'shell_names.txt'))
 
-    # Plot.
-    # The contourf() function can suffer an error when the input is almost flat (e.g. plotting the toroidal component of a spheroidal mode). To avoid this error, we reduce the number of contour levels.
-    n_c_levels_default = 20 
-    n_c_levels_fallback = 10 
-    try:
+        if first_iteration:
 
+            # Infer the maximum l-value used.
+            n_coeffs = len(Ulm)
+            l_max = (int((np.round(np.sqrt(8*n_coeffs + 1)) - 1))//2) - 1
+
+            # Re-construct the shtns calculator.
+            m_max = l_max
+            sh_calculator   = shtns.sht(l_max, m_max)
+            grid_type       =       shtns.sht_reg_fast          \
+                                |   shtns.SHT_SOUTH_POLE_FIRST  \
+                                |   shtns.SHT_PHI_CONTIGUOUS
+            sh_calculator.set_grid(n_lat_grid, n_lon_grid, flags = grid_type)
+
+            first_iteration = False
+
+        # Expand the VSH into spatial components.
+        U_r, V_e, V_n, W_e, W_n = project_from_spherical_harmonics(sh_calculator, Ulm, Vlm, Wlm)
+
+        # Plot.
+        n_c_levels_default = 20 
         plot_sh_disp_3_comp(lon_grid, lat_grid, U_r, V_e, V_n, W_e, W_n, ax_arr = None, show = False, title = title, n_c_levels = n_c_levels_default)
 
-    except AttributeError:
+        # Save the plot.
+        if option == 'quick':
 
-        print("Encountered Cartopy attribute error, trying with fewer contour levels.")
+            name_fig = 'displacement_{:}_{:>05d}.{:}'.format(option, i_mode, fmt)
+
+        else:
+
+            name_fig = 'displacement_{:}_{:>05d}_{:>03d}.{:}'.format(option, i_mode, j_radius, fmt)
+
+        path_fig = os.path.join(dir_plot, name_fig)
+        print('Saving figure to {:}'.format(path_fig))
+        save_figure(path_fig, fmt, transparent = transparent)
+
+        # Show the plot.
+        if show:
+
+            plt.show()
+
+        # Close the plot.
         plt.close()
-        plot_sh_disp_3_comp(lon_grid, lat_grid, U_r, V_e, V_n, W_e, W_n, ax_arr = None, show = False, title = title, n_c_levels = n_c_levels_fallback)
-
-    # Save the plot.
-    dir_plot = os.path.join(dir_processed, 'plots')
-    mkdir_if_not_exist(dir_plot)
-    name_fig = 'displacement_quick_{:>05d}.{:}'.format(i_mode, fmt)
-    path_fig = os.path.join(dir_plot, name_fig)
-    print('Saving figure to {:}'.format(path_fig))
-    save_figure(path_fig, fmt)
-    plt.savefig(path_fig)
-
-    # Show the plot.
-    if show:
-
-        plt.show()
-
-    # Close the plot.
-    plt.close()
 
     return
 
@@ -373,72 +406,123 @@ def plot_sh_disp_3_comp(lon_grid, lat_grid, U_r, V_e, V_n, W_e, W_n, ax_arr = No
     return
 
 # Plot spectral data. ---------------------------------------------------------
-def plot_sh_real_coeffs_3_comp_all_modes(dir_NM, fmt = 'pdf'):
+def plot_sh_real_coeffs_3_comp_all_modes(dir_NM, fmt = 'pdf', i_radius_str = None):
     '''
     Loop over all the modes and plot spherical harmonics.
     A wrapper for plot_sh_real_coeffs_3_comp_wrapper().
     '''
 
     #mode_list = get_list_of_modes_from_output_files(dir_NM)
-    mode_list = get_list_of_modes_from_coeff_files(dir_NM)
+    if i_radius_str is None:
+
+        option = 'quick'
+
+    else:
+
+        option = 'full'
+
+    mode_list = get_list_of_modes_from_coeff_files(dir_NM, option)
     
     for i_mode in mode_list:
 
         print('\nPlotting spectrum for mode {:>5d}.'.format(i_mode))
 
-        plot_sh_real_coeffs_3_comp_wrapper(dir_NM, i_mode, show = False, fmt = fmt)
+        plot_sh_real_coeffs_3_comp_wrapper(dir_NM, i_mode, show = False, fmt = fmt, i_radius_str = i_radius_str)
 
     return
 
-def plot_sh_real_coeffs_3_comp_wrapper(dir_NM, i_mode, show = True, fmt = 'pdf'):
+def plot_sh_real_coeffs_3_comp_wrapper(dir_NM, i_mode, show = True, fmt = 'pdf', i_radius_str = None):
     '''
     Load coefficients, then plot 3 sets of spherical harmonic coefficients on a grid.
     A wrapper for plot_sh_real_coeffs_3_comp().
     '''
 
-    # Load VSH coefficients.
+    # Define directories.
     dir_processed = os.path.join(dir_NM, 'processed')
-    Ulm, Vlm, Wlm, scale, r_max, region_max = load_vsh_coefficients(dir_NM, i_mode)
-    title = region_int_to_title(region_max, r_max, shell_name_path = os.path.join(dir_processed, 'shell_names.txt'))
-    # Infer the maximum l-value used.
-    n_coeffs = len(Ulm)
-    l_max = (int((np.round(np.sqrt(8*n_coeffs + 1)) - 1))//2) - 1
-    
-    # Convert from complex to real form.
-    ulm, l, m = convert_complex_sh_to_real(Ulm, l_max)
-    vlm, _, _ = convert_complex_sh_to_real(Vlm, l_max)
-    wlm, _, _ = convert_complex_sh_to_real(Wlm, l_max)
-
-    ## Generate the l and m lists.
-    #l, m = make_l_and_m_lists(l_max)
-
-    # Plot the coefficients.
-    plot_sh_real_coeffs_3_comp(
-            l, m, ulm, vlm, wlm,
-            title_str   = title,
-            fig         = None,
-            ax_arr      = None,
-            show        = False,
-            flip        = True,
-            c_max       = None,
-            abs_plot    = False)
-
-    # Save the plot.
     dir_plot = os.path.join(dir_processed, 'plots')
     mkdir_if_not_exist(dir_plot)
-    name_fig = 'spectrum_quick_{:>05d}.{:}'.format(i_mode, fmt)
-    path_fig = os.path.join(dir_plot, name_fig)
-    print('Saving figure to {:}'.format(path_fig))
 
-    save_figure(path_fig, fmt)
-    
-    # Show the figure.
-    if show:
+    # Determine if the plot is 'quick' mode or 'full' mode.
+    if i_radius_str is None:
 
-        plt.show()
+        option = 'quick'
 
-    # Close the figure.
-    plt.close()
+    else:
+
+        option = 'full'
+
+    if i_radius_str == 'all':
+
+        _, _, _, _, _, header_info = load_vsh_coefficients(dir_NM, i_mode, 0)
+        n_samples = len(header_info['r_sample'])
+
+        i_radius_list = list(range(n_samples))
+
+    elif i_radius_str is None:
+
+        i_radius_list = [None]
+
+    else:
+
+        i_radius_list = [int(i_radius_str)]
+
+    first_iteration = True
+    for j_radius in i_radius_list:
+
+        # Load VSH coefficients.
+        Ulm, Vlm, Wlm, r_sample, i_sample, _ = load_vsh_coefficients(dir_NM, i_mode, j_radius)
+        
+        first_iteration = True
+        if first_iteration:
+
+            # Infer the maximum l-value used.
+            n_coeffs = len(Ulm)
+            l_max = (int((np.round(np.sqrt(8*n_coeffs + 1)) - 1))//2) - 1
+
+            first_iteration = False
+
+        # Get title.
+        title = region_int_to_title(i_sample, r_sample, shell_name_path = os.path.join(dir_processed, 'shell_names.txt'))
+        
+        # Convert from complex to real form.
+        ulm, l, m = convert_complex_sh_to_real(Ulm, l_max)
+        vlm, _, _ = convert_complex_sh_to_real(Vlm, l_max)
+        wlm, _, _ = convert_complex_sh_to_real(Wlm, l_max)
+
+        ## Generate the l and m lists.
+        #l, m = make_l_and_m_lists(l_max)
+
+        # Plot the coefficients.
+        plot_sh_real_coeffs_3_comp(
+                l, m, ulm, vlm, wlm,
+                title_str   = title,
+                fig         = None,
+                ax_arr      = None,
+                show        = False,
+                flip        = True,
+                c_max       = None,
+                abs_plot    = False)
+
+        # Save the plot.
+        if option == 'quick':
+
+            name_fig = 'spectrum_quick_{:>05d}.{:}'.format(i_mode, fmt)
+
+        elif option == 'full':
+
+            name_fig = 'spectrum_full_{:>05d}_{:>03d}.{:}'.format(i_mode, j_radius, fmt)
+
+        path_fig = os.path.join(dir_plot, name_fig)
+        print('Saving figure to {:}'.format(path_fig))
+        save_figure(path_fig, fmt)
+        
+        # Show the figure.
+        if show:
+
+            plt.show()
+
+        # Close the figure.
+        plt.close()
 
     return 
 
@@ -678,32 +762,19 @@ def plot_sh_real_coeffs_3_comp(l, m, ulm, vlm, wlm, title_str = None, fig = None
 def main():
 
     # Read the NMPostProcess input file.
-    input_file = 'input_NMPostProcess.txt'
-    with open(input_file, 'r') as in_id:
+    dir_PM, dir_NM, _, l_max, i_mode_str, n_radii = read_input_NMPostProcess()
 
-        input_args = in_id.readlines()
-    
-    # Parse input arguments.
-    # Remove trailing newline characters.
-    input_args = [x.strip() for x in input_args]
-    dir_PM      = input_args[0]
-    dir_NM      = input_args[1]
-    option      = input_args[2]
-    l_max       = int(input_args[3])
-    #i_mode_str  = input_args[4]
+    # Read the input_plotting file.
+    option, i_radius_str, i_mode_str, fmt, n_lat_grid = read_input_plotting()
 
-    # Read the plotting input file.
-    plot_input_file = 'input_plotting.txt'
-    with open(plot_input_file, 'r') as in_id:
+    # Decide whether to show the plots.
+    if i_mode_str == 'all' or i_radius_str == 'all':
 
-        plot_input_args = in_id.readlines()
-    
-    # Parse input arguments.
-    # Remove trailing newline characters.
-    plot_input_args = [x.strip() for x in plot_input_args]
-    plot_type       = plot_input_args[0]
-    i_mode_str      = plot_input_args[1]
-    fmt             = plot_input_args[2]
+        show = False
+
+    else:
+
+        show = True
 
     # Plot all modes.
     if i_mode_str == 'all':
@@ -711,13 +782,12 @@ def main():
         # Spatial plot.
         if plot_type == 'spatial':
 
-            n_lat_grid = int(plot_input_args[3])
-            plot_sh_disp_all_modes(dir_NM, n_lat_grid, fmt = fmt)
+            plot_sh_disp_all_modes(dir_NM, n_lat_grid, fmt = fmt, i_radius_str = i_radius_str)
 
         # Spectral plot.
         elif plot_type == 'spectral':
 
-            plot_sh_real_coeffs_3_comp_all_modes(dir_NM, fmt = fmt)
+            plot_sh_real_coeffs_3_comp_all_modes(dir_NM, fmt = fmt, i_radius_str = i_radius_str)
 
         else:
 
@@ -729,13 +799,11 @@ def main():
         i_mode = int(i_mode_str)
         if plot_type == 'spatial':
 
-            n_lat_grid = int(plot_input_args[3])
-            plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, fmt = fmt)
-        
+            plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, fmt = fmt, i_radius_str = i_radius_str, show = show)
 
         elif plot_type == 'spectral':
             
-            plot_sh_real_coeffs_3_comp_wrapper(dir_NM, i_mode, fmt = fmt)
+            plot_sh_real_coeffs_3_comp_wrapper(dir_NM, i_mode, fmt = fmt, i_radius_str = i_radius_str, show = show)
 
         else:
 

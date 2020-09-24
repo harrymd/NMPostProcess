@@ -63,9 +63,12 @@ def calculate_power_distribution(Ulm, Vlm, Wlm, l_list, print_ = True):
 
 def characterise_all_modes_quick(dir_NM): 
 
+    option = 'quick'
+    i_radius = None
+
     # Get a list of modes.
     #i_mode_list = get_list_of_modes_from_output_files(dir_NM)
-    i_mode_list = get_list_of_modes_from_coeff_files(dir_NM)
+    i_mode_list = get_list_of_modes_from_coeff_files(dir_NM, option) 
     n_modes = len(i_mode_list)
 
     # Define directories.
@@ -76,7 +79,7 @@ def characterise_all_modes_quick(dir_NM):
     for i, i_mode in enumerate(i_mode_list):
 
         # Load the complex VSH coefficients.
-        Ulm, Vlm, Wlm, scale, r_max_i, i_region_max_i = load_vsh_coefficients(dir_NM, i_mode)
+        Ulm, Vlm, Wlm, r_max_i, i_region_max_i, _ = load_vsh_coefficients(dir_NM, i_mode, i_radius = i_radius)
 
         if first_iteration:
 

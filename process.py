@@ -84,6 +84,8 @@ n_lat_grid
     Number of latitude grid points. Must be an even number for SHTns. Set to 6*l_max, which should guarantee no aliasing.
 n_lon_grid
     Number of longitude grid points, equal to 2*(n_lat_grid - 1).
+n_radii
+    Number of different radial coordinates at which sampling is performed.
 
 # Variables relating to a specific sample point or region.
 i_mode
@@ -149,6 +151,7 @@ from functools import partial
 from glob import glob
 import multiprocessing
 import os
+import pickle
 
 # Import third-party modules
 import numpy as np
@@ -1154,13 +1157,13 @@ def find_r_max(nodes, node_idxs, eigvec, index_lists, r_min = None):
 
     return r_max, i_region_max, S_max
 
-def interpolate_eigvec_onto_sphere(r_q, i_region_q, nodes, node_idxs, eigvec, index_lists, n_lat_grid):
+def interpolate_eigvec_onto_sphere(path_interpolator_fmt, r_q, i_region_q, nodes, node_idxs, eigvec, index_lists, n_lat_grid):
     '''
     Interpolates the 3D displacement field onto a regular grid on a sphere with a specified radius.  
 
     Input:
 
-    r_q, i_region_q, nodes, node_idxs, eigvec, eigvec, index_lists, n_lat_grid
+    dir_processed, r_q, i_region_q, nodes, node_idxs, eigvec, eigvec, index_lists, n_lat_grid
         See 'Definitions of variables.'
     Note: If i_region_q specifies a discontinuity (case 1), then r_q is ignored.
 
@@ -1169,6 +1172,15 @@ def interpolate_eigvec_onto_sphere(r_q, i_region_q, nodes, node_idxs, eigvec, in
     lon_grid, lat_grid, eigvec_grid
         See 'Definitions of variables.'
     '''
+
+    # Check if the interpolator has already been created.
+    if path_interpolator_fmt is not None:
+
+         path_interpolator = path_interpolator_fmt.format(i_region_q)
+
+    else:
+
+        path_interpolator = None
 
     # Make lists of the regions which are discontinuities and which are interiors.
     n_regions = len(index_lists)
@@ -1223,22 +1235,46 @@ def interpolate_eigvec_onto_sphere(r_q, i_region_q, nodes, node_idxs, eigvec, in
 
     # Case 2: The query point is within the interior of one of the shells.
     else:
-        
-        # Extract the nodes from the interior region and its surrounding discontinuities.
-        # The inner region only has one bounding discontinuity.
-        if i_region_q == (n_regions - 1):
-            
-            i_region_list = [i_region_q - 1, i_region_q]
 
-        # Other regions have two bounding discontinuities.
+        # If no interpolator file is specified, or the interpolator file is specified but doesn't exist, we calculate a new interpolant.
+        # Note: Short-circuiting of 'or' conditional avoids os.path.exists(None) which would raise an error.
+        if (path_interpolator is None) or not (os.path.exists(path_interpolator)):
+        
+            # Extract the nodes from the interior region and its surrounding discontinuities.
+            # The inner region only has one bounding discontinuity.
+            if i_region_q == (n_regions - 1):
+                
+                i_region_list = [i_region_q - 1, i_region_q]
+
+            # Other regions have two bounding discontinuities.
+            else:
+
+                i_region_list = [i_region_q - 1, i_region_q, i_region_q + 1]
+            #
+            j = np.concatenate([index_lists[i] for i in i_region_list])
+            eigvec = eigvec[j, :]
+            nodes = nodes[node_idxs[j], :]
+
+
+            
+            # Create a linear interpolation function.
+            interpolator = LinearNDInterpolator(nodes, eigvec)
+
+            if path_interpolator is not None:
+
+                print('Saving linear interpolation file {:}'.format(path_interpolator))
+                with open(path_interpolator, 'wb') as interpolator_file_obj:
+
+                    pickle.dump(interpolator, interpolator_file_obj)
+
+        # If a linear interpolant file already exists, it is loaded to save computation time.
         else:
 
-            i_region_list = [i_region_q - 1, i_region_q, i_region_q + 1]
-        #
-        j = np.concatenate([index_lists[i] for i in i_region_list])
-        eigvec = eigvec[j, :]
-        nodes = nodes[node_idxs[j], :]
-
+            print('Linear interpolation file {:} already exists, loading...'.format(path_interpolator))
+            with open(path_interpolator, 'rb') as interpolator_file_obj:
+                
+                interpolator = pickle.load(interpolator_file_obj)
+            
         # Build a regular grid in longitude and latitude.
         # For consistency with Case 1, we use the grid from ssrfpy.interpolate_regular_grid().
         n_lon_grid = 2*n_lat_grid - 1
@@ -1249,10 +1285,6 @@ def interpolate_eigvec_onto_sphere(r_q, i_region_q, nodes, node_idxs, eigvec, in
 
         # Find the Cartesian coordinates of the lon/lat grid.
         x_grid, y_grid, z_grid = rlonlat_to_xyz(r_q, lon_grid, lat_grid)
-        
-        # Create a linear interpolation function.
-        #if interpolator is None:
-        interpolator = LinearNDInterpolator(nodes, eigvec)
            
         # Find the eigenfunction at the grid points using interpolation.
         eigvec_grid = interpolator((x_grid, y_grid, z_grid))
@@ -1340,11 +1372,12 @@ def transform_to_spherical_harmonics(s_r_grid, s_n_grid, s_e_grid, n_lat_grid, n
     Ulm, Vlm, Wlm, l_list, m_list, sh_calculator
         See 'Definitions of variables'.
     '''
-    
+
     # Use SHTns to calculate the vector spherical harmonics.
     #
     # Create an instance of the spherical harmonic transform object and set the grid.
     m_max = l_max
+    #sh_calculator   = shtns.sht(l_max, m_max, norm = shtns.sht_orthonormal)
     sh_calculator   = shtns.sht(l_max, m_max)
     grid_type       =       shtns.sht_reg_fast          \
                         |   shtns.SHT_SOUTH_POLE_FIRST  \
@@ -1368,8 +1401,10 @@ def transform_to_spherical_harmonics(s_r_grid, s_n_grid, s_e_grid, n_lat_grid, n
     # Retrieve the l- and m-values (angular order and degree) corresponding to each coefficient.
     l_list = sh_calculator.l
     m_list = sh_calculator.m
-    
-    return Ulm, Vlm, Wlm, l_list, m_list, sh_calculator
+
+    # Note: No longer return sh_calculator due to shtns initialisation bug.
+    #return Ulm, Vlm, Wlm, l_list, m_list, sh_calculator
+    return Ulm, Vlm, Wlm, l_list, m_list
 
 def project_from_spherical_harmonics(sh_calculator, Ulm, Vlm, Wlm):
     '''
@@ -1422,18 +1457,9 @@ def project_from_spherical_harmonics(sh_calculator, Ulm, Vlm, Wlm):
     return Pr, Ve, Vn, We, Wn
 
 # Vector-spherical-harmonic projection at one radius ('quick mode'). ----------
-def vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, r_discons, i_mode, save_spatial = False):
+def pre_projection(dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, r_discons, i_mode):
     '''
-    Calculate vector-spherical-harmonic coefficients of displacement field at the radius of maximum displacement.
-
-    Input:
-
-    dir_PM, dir_NM, l_max, eigvec_path_base, nodes_node_idxs, node_attbs, index_lists, r_discons, i_mode, save_spatial
-        See 'Definitions of variables'.
-
-    Output:
-
-    None (results are saved to file)
+    Load mode information, discard second-order nodes, find maximum displacement and normalise eigenvector.
     '''
 
     # Note: Must be an even number.
@@ -1458,8 +1484,16 @@ def vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_id
     # Normalise the eigenvector, for better numerical behavior.
     eigvec = eigvec/eigvec_max
 
+    return n_lat_grid, dir_processed, freq, node_idxs, node_attbs, eigvec, index_lists, r_max, i_region_max, eigvec_max
+
+def process_one_depth(path_interpolant_fmt, r_sample, i_region_sample, nodes, node_idxs, eigvec, index_lists, n_lat_grid, l_max):
+    '''
+    Interpolate, calculate unit vectors, project along unit vectors, and transform from vector components to vector spherical harmonics.
+    '''
+
     # At this radial coordinate, interpolate the displacement field onto the sphere.
-    lon_grid, lat_grid, eigvec_grid = interpolate_eigvec_onto_sphere(r_max, i_region_max, nodes, node_idxs, eigvec, index_lists, n_lat_grid)
+    #interpolator_path_fmt = os.path.join(dir_processed, 'interpolator_{:>05d}_{:}.pkl'.format(i_mode, '{:>03d}'))
+    lon_grid, lat_grid, eigvec_grid = interpolate_eigvec_onto_sphere(path_interpolant_fmt, r_sample, i_region_sample, nodes, node_idxs, eigvec, index_lists, n_lat_grid)
     n_lon_grid = lon_grid.shape[1]
 
     # At the grid points, calculate unit vectors in the radial, east and north directions (in terms of the Cartesian basis).
@@ -1469,39 +1503,110 @@ def vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_id
     eigvec_r_grid, eigvec_e_grid, eigvec_n_grid = project_along_unit_vectors(eigvec_grid, r_hat_grid, e_hat_grid, n_hat_grid)
 
     # Transform vector spatial components to vector spherical harmonics.
-    Ulm, Vlm, Wlm, l_list, m_list, sh_calculator = \
+    # Note: No longer return sh_calculator due to shtns initialisation bug.
+    #Ulm, Vlm, Wlm, l_list, m_list, sh_calculator = \
+    Ulm, Vlm, Wlm, l_list, m_list = \
         transform_to_spherical_harmonics(
             eigvec_r_grid, eigvec_n_grid, eigvec_e_grid, n_lat_grid, n_lon_grid, l_max)
 
-    if save_spatial:
+    return Ulm, Vlm, Wlm
 
-        # Calculate the spatial representation of the radial, consoidal and toroidal components.
-        Ur_grid, Ve_grid, Vn_grid, We_grid, Wn_grid = \
-            project_from_spherical_harmonics(sh_calculator, Ulm, Vlm, Wlm)
+def save_spectral(dir_processed, i_mode, coeffs, header_info):
 
-        # Save spatial output.
-        array_out_spatial = np.array([eigvec_grid[..., 0], eigvec_grid[..., 1], eigvec_grid[..., 2], eigvec_r_grid, eigvec_e_grid, eigvec_n_grid, Ur_grid, Ve_grid, Vn_grid, We_grid, Wn_grid])
-        dir_spatial = os.path.join(dir_processed, 'spatial')
-        mkdir_if_not_exist(dir_spatial)
-        file_out_spatial = 'quick_spatial_{:>05d}.npy'.format(i_mode)
-        path_out_spatial = os.path.join(dir_spatial, file_out_spatial)
-        print('Saving spatial data to {:}'.format(path_out_spatial))
-        np.save(path_out_spatial, array_out_spatial)
+    # Determine whether the output is 'quick' or 'full'.
+    n_radii = coeffs.shape[0]
+    if n_radii == 1:
+
+        option = 'quick'
+
+    else:
+
+        option = 'full'
 
     # Save spectral output.
-    array_out_spectral = np.array([Ulm, Vlm, Wlm])
-    #
-    # Add a header line with the scale information.
-    array_out_spectral = np.insert(array_out_spectral, 0, [eigvec_max, 0.0, 0.0], axis = 1)
-    #
-    # Add header with maximum radius information.
-    array_out_spectral = np.insert(array_out_spectral, 0, [r_max, i_region_max, 0.0], axis = 1)
-    #
     dir_spectral = os.path.join(dir_processed, 'spectral')
-    file_out_spectral = 'quick_spectral_{:>05d}.npy'.format(i_mode)
+    file_out_spectral = '{:}_spectral_{:>05d}.npy'.format(option, i_mode)
     path_out_spectral = os.path.join(dir_spectral, file_out_spectral)
     print('Saving spectral data to {:}'.format(path_out_spectral))
-    np.save(path_out_spectral, array_out_spectral)
+    np.save(path_out_spectral, coeffs)
+
+    # Save spectral header information.
+    header_spectral = np.array([header_info['eigvec_max'],
+                                header_info['r_max'],
+                                header_info['i_region_max'],
+                                *header_info['r_sample'],
+                                *header_info['i_sample']])
+    file_out_spectral_header = '{:}_spectral_header_{:>05d}.npy'.format(option, i_mode)
+    path_out_spectral_header = os.path.join(dir_spectral, file_out_spectral_header)
+    print('Saving spectral data header to {:}'.format(path_out_spectral_header))
+    np.save(path_out_spectral_header, header_spectral)
+
+    return
+
+def vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, r_discons, i_mode, save_spatial = False):
+    '''
+    Calculate vector-spherical-harmonic coefficients of displacement field at the radius of maximum displacement.
+
+    Input:
+
+    dir_PM, dir_NM, l_max, eigvec_path_base, nodes_node_idxs, node_attbs, index_lists, r_discons, i_mode, save_spatial
+        See 'Definitions of variables'.
+
+    Output:
+
+    None (results are saved to file)
+    '''
+
+    # Load mode information, discard second-order nodes, find maximum displacement and normalise eigenvector.
+    n_lat_grid, dir_processed, freq, node_idxs, node_attbs, eigvec, \
+    index_lists, r_max, i_region_max, eigvec_max = pre_projection(
+            dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, r_discons, i_mode)
+
+    # Interpolate, calculate unit vectors, project along unit vectors, and transform from vector components to vector spherical harmonics.
+    Ulm, Vlm, Wlm = process_one_depth(None, r_max, i_region_max, nodes, node_idxs, eigvec, index_lists, n_lat_grid, l_max)
+
+    if save_spatial:
+
+        raise NotImplementedError
+
+        ## Calculate the spatial representation of the radial, consoidal and toroidal components.
+        #Ur_grid, Ve_grid, Vn_grid, We_grid, Wn_grid = \
+        #    project_from_spherical_harmonics(sh_calculator, Ulm, Vlm, Wlm)
+
+        ## Save spatial output.
+        #array_out_spatial = np.array([eigvec_grid[..., 0], eigvec_grid[..., 1], eigvec_grid[..., 2], eigvec_r_grid, eigvec_e_grid, eigvec_n_grid, Ur_grid, Ve_grid, Vn_grid, We_grid, Wn_grid])
+        #dir_spatial = os.path.join(dir_processed, 'spatial')
+        #mkdir_if_not_exist(dir_spatial)
+        #file_out_spatial = 'quick_spatial_{:>05d}.npy'.format(i_mode)
+        #path_out_spatial = os.path.join(dir_spatial, file_out_spatial)
+        #print('Saving spatial data to {:}'.format(path_out_spatial))
+        #np.save(path_out_spatial, array_out_spatial)
+
+    # Save spectral output including header.
+    # Note: Insert singleton dimension for consistency with 'full' mode.
+    coeffs = np.array([Ulm, Vlm, Wlm])
+    coeffs = np.expand_dims(coeffs, 0)
+    header_info = { 'eigvec_max'    : eigvec_max,
+                    'r_max'         : r_max,
+                    'i_region_max'  : i_region_max,
+                    'r_sample'      : [r_max],
+                    'i_sample'      : [i_region_max]}
+    save_spectral(dir_processed, i_mode, coeffs, header_info)
+
+    ## Save spectral output.
+    #array_out_spectral = np.array([Ulm, Vlm, Wlm])
+    ##
+    ## Add a header line with the scale information.
+    #array_out_spectral = np.insert(array_out_spectral, 0, [eigvec_max, 0.0, 0.0], axis = 1)
+    ##
+    ## Add header with maximum radius information.
+    #array_out_spectral = np.insert(array_out_spectral, 0, [r_max, i_region_max, 0.0], axis = 1)
+    ##
+    #dir_spectral = os.path.join(dir_processed, 'spectral')
+    #file_out_spectral = 'quick_spectral_{:>05d}.npy'.format(i_mode)
+    #path_out_spectral = os.path.join(dir_spectral, file_out_spectral)
+    #print('Saving spectral data to {:}'.format(path_out_spectral))
+    #np.save(path_out_spectral, array_out_spectral)
 
     return
 
@@ -1602,24 +1707,286 @@ def vsh_projection_quick_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, save_
 
     return
 
+# Vector-spherical-harmonic projection at multiple radii ('full mode'). -------
+def get_sampling_radii(r_discons, n_radii):
+    '''
+    Finds radii which are approximately evenly-spaced, including points on the
+    inner and outer surface of each discontinuity and at least one point within
+    the interior of each shell.
+
+    Input:
+
+    r_discons, n_radii
+        See 'Definitions of variables'.
+
+    Output:
+
+    r_sample, i_sample
+    '''
+    
+    n_discons = len(r_discons)
+    n_shell = n_discons
+    r_srf = r_discons[0]
+    r_inner = 0.1*r_srf
+
+    if n_discons == 1:
+
+        raise NotImplementedError
+
+    else:
+
+        if (r_inner > r_discons[-1]):
+
+            print('\nNotImplementedError:')
+            print('Radial sampling is chosen to begin at 10% of the outer radius, in this case: {:.1f} km.'.format(r_inner))
+            print('However the innermost discontinuity has a smaller radius of {:.1f} km.'.format(r_discons[-1]))
+            print('This situation has not yet been implemented in process.get_sampling_radii().')
+            raise NotImplementedError('See error message before traceback.')
+
+        assert (n_radii >= 3*n_shell), 'n_radii = {:d} is too small. Require at least {:d} (3 per shell with {:d} shells)'.format(n_radii, 3*n_shell, n_shell)
+
+        # Form arrays of cell radii and thickness.
+        # r_shell: The inner and outer radii of each shell.
+        # delta_shell: The thickness of each shell.
+        r_shell = np.array([*r_discons, r_inner])
+        delta_shell = -1.0*np.diff(r_shell)
+
+        # Start with three points per shell.
+        n_points_per_shell = np.zeros(n_shell, dtype = np.int) + 3
+        n_points = np.sum(n_points_per_shell)
+
+        # Assign points to shells one by one.
+        # The aim is to have the most even spacing possible.
+        # This is quantified in terms of the variance of the spacing.
+        # variance: For a given iteration, the variance of the new spacing
+        # formed by adding a point to each shell.
+        for _ in range(n_radii - n_points):
+
+            variance = np.zeros(n_shell)
+
+            for j in range(n_shell):
+
+                # Try adding a point to the j_th shell.
+                n_points_per_shell[j] = n_points_per_shell[j] + 1
+
+                # Calculate the variance when the point is added to the
+                # j_th shell.
+                n_intervals_per_shell = n_points_per_shell - 1
+                spacing = delta_shell/n_intervals_per_shell
+                intervals_list = [np.repeat(spacing[i], n_intervals_per_shell[i]) for i in range(n_shell)]
+                intervals = np.concatenate(intervals_list)
+                variance[j] = np.var(intervals)
+
+                # Remove the point.
+                n_points_per_shell[j] = n_points_per_shell[j] - 1
+
+            # Find the shell which reduces the variance the most and
+            # permanently add a point to this shell.
+            i_best = np.argmin(variance)
+            n_points_per_shell[i_best] = n_points_per_shell[i_best] + 1
+
+    # Calculate the sample points.
+    r_sample_list = []
+    i_sample_list = []
+    for i in range(n_shell):
+        
+        r_shell_inner = r_shell[i + 1]
+        r_shell_outer = r_shell[i]
+
+        r_sample_list.append(np.linspace(r_shell_outer, r_shell_inner, num = n_points_per_shell[i]))
+
+        i_sample_outer_i = 3*i
+        i_sample_interior_i = 3*i + 1 
+        i_sample_inner_i = 3*i + 2
+
+        i_sample_i = np.zeros(n_points_per_shell[i], dtype = np.int) + i_sample_interior_i
+        i_sample_i[0] = i_sample_outer_i
+
+        if i < (n_shell - 1):
+
+            i_sample_i[-1] = i_sample_inner_i
+
+        i_sample_list.append(i_sample_i)
+
+    r_sample = np.concatenate(r_sample_list)
+    i_sample = np.concatenate(i_sample_list)
+
+    return r_sample, i_sample
+
+def remove_interpolant_files(path_interpolator_fmt, i_sample):
+
+    # Delete the interpolant files.
+    print('Removing interpolant files.')
+    i_region_unique = list(set(i_sample))
+    i_interior_region = [i for i in i_region_unique if ((i % 3) == 1)]
+    for i in i_interior_region: 
+
+         path_interpolator = path_interpolator_fmt.format(i)
+         os.remove(path_interpolator)
+
+    return
+
+def vsh_projection_full(dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, r_discons, r_sample, i_sample, i_mode):
+    '''
+    Perform VSH projection at specified radial coordinates.
+    '''
+
+    # Define directories.
+    dir_processed = os.path.join(dir_NM, 'processed')
+    path_interpolator_fmt = os.path.join(dir_processed, 'interpolator_{:>05d}_{:}.pkl'.format(i_mode, '{:>03d}'))
+
+    # Load mode information, discard second-order nodes, find maximum displacement and normalise eigenvector.
+    n_lat_grid, dir_processed, freq, node_idxs, node_attbs, eigvec, \
+    index_lists, r_max, i_region_max, eigvec_max = pre_projection(
+            dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, r_discons, i_mode)
+
+    # Loop over the different sampling radii.
+    n_coeffs = (l_max + 1)*(l_max + 2)//2
+    n_radii = len(r_sample)
+    coeffs = np.zeros((n_radii, 3, n_coeffs), dtype = np.complex)
+    #
+    for i in range(n_radii):
+
+        print('Processing at radius sample {:>4d} of {:>4d}, radius {:>9.1f} km, region {:>4d}'.format(i + 1, n_radii, r_sample[i], i_sample[i]))
+
+        # Interpolate, calculate unit vectors, project along unit vectors, and transform from vector components to vector spherical harmonics.
+        Ulm, Vlm, Wlm = process_one_depth(path_interpolator_fmt, r_sample[i], i_sample[i], nodes, node_idxs, eigvec, index_lists, n_lat_grid, l_max)
+
+        # Store in the output array.
+        coeffs[i, 0, :] = Ulm
+        coeffs[i, 1, :] = Vlm
+        coeffs[i, 2, :] = Wlm
+
+    # Save the output.
+    header_info = { 'eigvec_max'    : eigvec_max,
+                    'r_max'         : r_max,
+                    'i_region_max'  : i_region_max,
+                    'r_sample'      : r_sample,
+                    'i_sample'      : i_sample}
+    save_spectral(dir_processed, i_mode, coeffs, header_info)
+    #save_vsh_full(dir_processed, i_mode, coeffs, eigvec_max, r_max, i_region_max)
+
+    # Remove the interpolant files.
+    remove_interpolant_files(path_interpolator_fmt, i_sample)
+
+    return coeffs, eigvec_max, r_max, i_region_max
+
+def vsh_projection_full_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base, n_radii):
+    '''
+    A wrapper for vsh_projection_full(), which assembles the relevant information.
+
+    Input:
+
+    dir_PM, dir_NM, l_max, i_mode, eigvec_path_base, n_radii
+        See 'Definitions of variables'.
+
+    Output:
+
+    None (output is saved to file).
+    '''
+    
+    # Define directory names.
+    dir_processed = os.path.join(dir_NM, 'processed')
+    #path_interpolator_fmt = os.path.join(dir_processed, 'interpolator_{:>05d}_{:}.pkl'.format(i_mode, '{:>03d}'))
+
+    # Read various information about the mesh.
+    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists = \
+            read_info_for_projection(dir_PM, dir_NM)
+
+    # Get the sampling radii.
+    r_sample, i_sample = get_sampling_radii(r_discons, n_radii)
+
+    # Perform the VSH projection at each radius.
+    coeffs, eigvec_max, r_max, i_region_max = \
+        vsh_projection_full(dir_NM, l_max, eigvec_path_base, nodes, node_idxs,
+            node_attbs, index_lists, r_discons, r_sample, i_sample, i_mode)
+
+    return
+
+def vsh_projection_full_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, n_radii):
+    '''
+    A wrapper for vsh_projection_full(), which assembles the relevant information.
+
+    Input:
+
+    dir_PM, dir_NM, l_max, i_mode, eigvec_path_base, n_radii
+        See 'Definitions of variables'.
+
+    Output:
+
+    None (output is saved to file).
+    '''
+    
+    # Define directory names.
+    dir_processed = os.path.join(dir_NM, 'processed')
+
+    # Read various information about the mesh.
+    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists = \
+            read_info_for_projection(dir_PM, dir_NM)
+
+    # Get the sampling radii.
+    r_sample, i_sample = get_sampling_radii(r_discons, n_radii)
+
+    # Get a list of modes.
+    i_mode_list = get_list_of_modes_from_output_files(dir_NM)
+
+    # Loop over list of modes.
+    for i_mode in i_mode_list:
+
+        print('\nFull VSH projection: processing mode: {:>5d}'.format(i_mode))
+
+        # Perform the VSH projection at each radius.
+        #path_interpolator_fmt = os.path.join(dir_processed, 'interpolator_{:>05d}_{:}.pkl'.format(i_mode, '{:>03d}'))
+        coeffs, eigvec_max, r_max, i_region_max = \
+            vsh_projection_full(dir_NM, l_max, eigvec_path_base, nodes, node_idxs,
+                node_attbs, index_lists, r_discons, i_mode, r_sample, i_sample)
+
+    return
+
+def vsh_projection_full_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, n_radii):
+    '''
+    A wrapper for vsh_projection_full(), which assembles the relevant information.
+
+    Input:
+
+    dir_PM, dir_NM, l_max, i_mode, eigvec_path_base, n_radii
+        See 'Definitions of variables'.
+
+    Output:
+
+    None (output is saved to file).
+    '''
+    
+    # Define directory names.
+    dir_processed = os.path.join(dir_NM, 'processed')
+
+    # Read various information about the mesh.
+    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists = \
+            read_info_for_projection(dir_PM, dir_NM)
+
+    # Get the sampling radii.
+    r_sample, i_sample = get_sampling_radii(r_discons, n_radii)
+
+    # Get a list of modes.
+    i_mode_list = get_list_of_modes_from_output_files(dir_NM)
+    i_mode_list = [1, 2]
+
+    # Open a parallel pool.
+    n_processes = multiprocessing.cpu_count()  
+    print('Creating pool with {:d} processes.'.format(n_processes))
+    with multiprocessing.Pool(processes = n_processes) as pool:
+        
+        # Use the pool to analyse the modes specified by num_span.
+        # Note that the partial() function is used to meet the requirement of pool.map() of a pickleable function with a single input.
+        pool.map(partial(vsh_projection_full, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, r_discons, r_sample, i_sample), i_mode_list)
+
+    return
+
 # Main. -----------------------------------------------------------------------
 def main():
     
     # Read the input file.
-    input_file = 'input_NMPostProcess.txt'
-    with open(input_file, 'r') as in_id:
-
-        input_args = in_id.readlines()
-    
-    # Parse input arguments.
-    # Remove trailing newline characters.
-    input_args = [x.strip() for x in input_args]
-    #
-    dir_PM      = input_args[0]
-    dir_NM      = input_args[1]
-    option      = input_args[2]
-    l_max       = int(input_args[3])
-    i_mode_str  = input_args[4]
+    dir_PM, dir_NM, option, l_max, i_mode_str, n_radii = read_input_NMPostProcess()
 
     # Do pre-processing steps.
     pre_process(dir_PM, dir_NM)
@@ -1643,6 +2010,24 @@ def main():
 
             i_mode = int(i_mode_str)
             vsh_projection_quick_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base)
+
+    # Full projection (at a range of radii).
+    elif option == 'full':
+
+        # Loop over all modes.
+        if i_mode_str == 'all':
+
+            vsh_projection_full_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, n_radii)
+
+        # Loop over all modes using all available processors.
+        elif i_mode_str == 'parallel':
+
+            vsh_projection_full_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, n_radii)
+
+        else:
+
+            i_mode = int(i_mode_str)
+            vsh_projection_full_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base, n_radii)
 
     else:
 

@@ -109,17 +109,18 @@ For example, to project mode number 15 using a maximum <img src="https://render.
 python3 project.py
 ```
 
-with the following input file
+with the following input file (comments should be removed)
 
 ```
-/example/path/output/PlanetaryModels/LLSVP/prem_0439.4_2.00_1/
-/example/path/output/NormalModes/prem_0439.4_2.00_1_00.10_01.00_1/
-quick
-10
-15
+/example/model_dir/		# Directory containing model files.
+/example/eigvec_dir/	# Directory containing eigenvector files.
+quick					# Option ('quick' or 'full').
+10						# l_max (maximum angular order, must be integer).
+15 						# i_mode (mode ID: integer, 'all', or 'parallel').
+# Any further lines are ignored (but see 'full projection'). 
 ```
 
-The mode number can also be set as `all` to loop over all modes (this can be slow for large runs).
+Notice that the mode number can also be set as `all` to loop over all modes (this can be slow for large runs) or `parallel` to loop over all modes using all available cores.
 
 Choosing the maximum <img src="https://render.githubusercontent.com/render/math?math=\ell">-value should be based on the expected spatial wavelength of the modes, which depends on the upper frequency limit of the *NormalModes* run. For example, on Earth, we see that modes have <img src="https://render.githubusercontent.com/render/math?math=\ell">-values less than approximately <img src="https://render.githubusercontent.com/render/math?math=10\times f">, where <img src="https://render.githubusercontent.com/render/math?math=10\times f"> where <img src="https://render.githubusercontent.com/render/math?math=f"> is the frequency in mHz. In this example, the run had an upper frequency limit of 1.0 mHz, so a maximum <img src="https://render.githubusercontent.com/render/math?math=\ell">-value of 10 was appropriate. Similar relationships can deduced for other planets using spherically-symmetric codes such as [*Mineos*](https://geodynamics.org/cig/software/mineos/). Choosing a maximum <img src="https://render.githubusercontent.com/render/math?math=\ell">-value that is much too high will slow down the processing and may increase numerical noise. If it is too low, the expansion of the spatial patterns will be truncated, causing aliasing and mode misidentification.
 
@@ -157,10 +158,11 @@ We can see this mode is a spheroidal mode (no toroidal component). Note that the
 A spatial plot input file looks like this
 
 ```
-spatial
-15
-png
-90
+quick		# Option: 'quick' for quick-mode plots.
+spatial 	# 'spatial' or 'spectral'.
+15			# i_mode: The mode ID (integer or 'all').
+png			# Figure output format ('png' or 'pdf').
+90			# n_lat: Points in latitude grid (ignored for spectral).
 ```
 
 where the second line is the mode number (can also be `all`), the third line is the output figure format (currently supports `png` and `pdf`), and fourth line is the number of latitude grid points (see discussion in 'Using the code: Quick projection'). The spatial field is calculated by re-projecting the VSH coefficients.
@@ -248,7 +250,19 @@ The mode clustering information can be helpful for identifying numerical errors 
 
 'Full projection' calculates VSH coefficients on spherical surfaces with various radii from the centre of the planet to the surface, instead of the one radius used in quick projection. This means that full projection is slower, but it provides a full description of the mode displacement field throughout the planet. This can give more robust mode identifications.
 
-Full projection has been implemented offline, but the code is not currently ready to include in this library.
+Using 'full projection' is very similar to 'quick projection'. The only differences are in the input file (`input_NMPostProcess.txt`). The third line must be changed to `full` and an additional (sixth) line must be added with the number of radii to use. For example:
+
+```
+/example/model_dir/ # 
+/example/data_dir/ 	#
+full
+10
+15
+20
+```
+
+will run a full projection at 20 radii. The code will choose the radii to be as evenly-distributed as possible, with at least three radii in each shell (one at the outer boundary, one at the inner boundary, and one within the shell).
+
 
 <a href="#top">Back to top</a>
 
