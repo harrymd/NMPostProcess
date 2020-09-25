@@ -335,7 +335,7 @@ and other times it will fail to draw some contour levels without raising an erro
 
 ## Contributors and version history
 
-* Version 1: 1st August 2020: Created by [Harry Matchette-Downes](http://web.mit.edu/hrmd/www/home.html). Includes 'quick' processing, and plotting of maps, spectra and mode diagrams.
+* Version 1: 27th August 2020: Created by [Harry Matchette-Downes](http://web.mit.edu/hrmd/www/home.html). Includes 'quick' processing, and plotting of maps, spectra and mode diagrams.
 * Version 2: 24th September 2020: Added 'full' projection.
 
 ### Future

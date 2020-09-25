@@ -1,8 +1,8 @@
-/scratch/06414/tg857131/gas_giants/data/inputs/Polytrope/sat_m5_ntess_5_pOrder_1/
-/scratch/06414/tg857131/gas_giants/data/outputs/Polytrope/sat_m5_ntess_5_pOrder_1/
+/Users/hrmd_work/Documents/research/gas_giants/data/inputs/Polytrope/sat_m5_ntess_5_pOrder_1/
+/Users/hrmd_work/Documents/research/gas_giants/data/outputs/Polytrope/sat_m5_ntess_5_pOrder_1/
 full 20
 10
-parallel
+1
 
 # Anything below is ignored.
 
@@ -28,6 +28,12 @@ all
 quick
 10
 1
+
+/scratch/06414/tg857131/gas_giants/data/inputs/Polytrope/sat_m5_ntess_5_pOrder_1/
+/scratch/06414/tg857131/gas_giants/data/outputs/Polytrope/sat_m5_ntess_5_pOrder_1/
+full 20
+10
+parallel
 
 # Full. -----------------------------------------------------------------------
 
