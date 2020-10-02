@@ -21,7 +21,8 @@ import  numpy                   as      np
 import  shtns
 
 # Local modules.
-from common         import convert_complex_sh_to_real, get_list_of_modes_from_coeff_files, load_vsh_coefficients, make_l_and_m_lists, mkdir_if_not_exist
+from common         import convert_complex_sh_to_real, get_list_of_modes_from_coeff_files, load_vsh_coefficients, make_l_and_m_lists, mkdir_if_not_exist, read_input_NMPostProcess, read_input_plotting
+from plot.common import save_figure
 from process        import project_from_spherical_harmonics 
 
 def region_int_to_title(region, radius, shell_name_path = None):
@@ -72,26 +73,6 @@ def region_int_to_title(region, radius, shell_name_path = None):
         title = 'Inner surface of {:}'.format(shell_str)
 
     return title
-
-def save_figure(path_fig, fmt, transparent = False):
-
-    if fmt == 'pdf':
-        
-        if transparent:
-
-            print('Warning: cannot save transparent figure with fmt = pdf')
-
-        plt.savefig(path_fig)
-
-    elif fmt == 'png':
-
-        plt.savefig(path_fig, dpi = 300, transparent = transparent)
-
-    else:
-
-        raise NotImplementedError('Can only save to format pdf or png, not {:}'.format(fmt))
-
-    return
 
 # Plot displacement patterns. -------------------------------------------------
 def plot_sh_disp_all_modes(dir_NM, n_lat_grid, fmt = 'pdf', i_radius_str = None):
@@ -765,7 +746,7 @@ def main():
     dir_PM, dir_NM, _, l_max, i_mode_str, n_radii = read_input_NMPostProcess()
 
     # Read the input_plotting file.
-    option, i_radius_str, i_mode_str, fmt, n_lat_grid = read_input_plotting()
+    option, i_radius_str, plot_type, i_mode_str, fmt, n_lat_grid = read_input_plotting()
 
     # Decide whether to show the plots.
     if i_mode_str == 'all' or i_radius_str == 'all':
@@ -791,7 +772,7 @@ def main():
 
         else:
 
-            raise ValueError('Plot type {:} from input file {:} not recognised.'.format(plot_type, input_file))
+            raise ValueError('Plot type {:} from input file not recognised.'.format(plot_type))
 
     # Plot one mode.
     else:
@@ -807,7 +788,7 @@ def main():
 
         else:
 
-            raise ValueError('Plot type {:} from input file {:} not recognised.'.format(plot_type, input_file))
+            raise ValueError('Plot type {:} from input file not recognised.'.format(plot_type))
 
 if __name__ == '__main__':
 

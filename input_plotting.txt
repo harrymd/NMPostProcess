@@ -1,6 +1,6 @@
 full all 
 spectral
-1
+149
 png
 
 # The lines below are ignored.

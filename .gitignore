@@ -3,3 +3,5 @@ __pycache__/
 NMPP*.txt
 NMPP*.err
 run_NMPP.sbatch
+input_NMPostProcess.txt
+input_plotting.txt

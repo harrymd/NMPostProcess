@@ -161,7 +161,7 @@ import shtns
 import ssrfpy
 
 # Import local modules.
-from common import get_list_of_modes_from_output_files, mkdir_if_not_exist, read_eigenvalues, read_input_NMPostProcess
+from common import get_list_of_modes_from_output_files, mkdir_if_not_exist, read_discon_file, read_eigenvalues, read_input_NMPostProcess
 
 # Pre-processing steps (only performed once for a given run). -----------------
 def write_eigenvalues_from_std_out_file(path_std_out, path_eigval_list = None): 
@@ -233,35 +233,6 @@ def write_eigenvalues_from_eigs_txt_file(path_eigs_txt, path_eigval_list):
 
     return
 
-def read_discon_file(path_discon_info):
-    '''
-    Reads information about solid-fluid discontinuities.
-
-    Input:
-
-    path_discon_info
-        See 'Definitions of variables'.
-
-    Output:
-
-    r_discons, state_outer
-        See 'Definitions of variables'.
-    '''
-
-    with open(path_discon_info, 'r') as in_id:
-
-        # Read lines, remove newline character.
-        lines = in_id.readlines()
-        lines = [x.strip() for x in lines]
-
-        # First line is state of outer shell.
-        state_outer = lines[0]
-
-        # Remaining lines are radii of discontinuities (including surface), starting at the surface.
-        r_discons = np.array([float(x) for x in lines[1:]])
-
-    return r_discons, state_outer
-    
 def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default'):
     '''
     For each region (outer surface, interior, and inner surface of each shell), find the indices of the samples belonging to that region.

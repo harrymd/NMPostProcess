@@ -25,6 +25,12 @@ quick
 10
 1
 
+/scratch/06414/tg857131/gas_giants/data/inputs/Polytrope/sat_m5_ntess_5_pOrder_1/
+/scratch/06414/tg857131/gas_giants/data/outputs/Polytrope/sat_m5_ntess_5_pOrder_1/
+full 20
+10
+parallel
+
 # Full. -----------------------------------------------------------------------
 
 # PREM spherical inputs. 
