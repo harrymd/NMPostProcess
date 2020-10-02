@@ -773,9 +773,10 @@ def load_sample_indices_and_attribs(dir_NM):
     node_attbs  = np.fromfile(path_vstat, dtype = '<i')
     
     # Print a vertex attribute summary.
-    n_nodes_by_attb = [np.sum(node_attbs == i) for i in range(3)]
+    unique_node_attbs = np.unique(node_attbs)
+    n_nodes_by_attb = [np.sum(node_attbs == i) for i in unique_node_attbs]
     print('Vertex attribute summary:')
-    for i in range(3):
+    for i in unique_node_attbs: 
 
         print('{:2d} {:6d}'.format(i, n_nodes_by_attb[i]))
     
@@ -1090,9 +1091,13 @@ def get_discon_info(r_discons, state_outer):
 
         i_offset = 0
 
-    else:
+    elif state_outer == 'liquid':
 
         i_offset = 1
+
+    else:
+
+        raise ValueError('state_outer: {:}'.format(state_outer))
     
     state_list = []
     n_shells = n_interior_discons + 1

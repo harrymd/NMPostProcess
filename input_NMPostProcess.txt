@@ -1,19 +1,15 @@
-/scratch/06414/tg857131/gas_giants/data/inputs/Polytrope/sat_m5_ntess_5_pOrder_1/
-/scratch/06414/tg857131/gas_giants/data/outputs/Polytrope/sat_m5_ntess_5_pOrder_1/
-full 20
+/scratch/06414/tg857131/PlanetaryModels/output/LLSVP/prem_0303.7_2.00_1/
+/scratch/06414/tg857131/NormalModes/output/prem_0303.7_2.00_1_00.10_01.00_1/
+quick
 10
-parallel
+all
 
 # Anything below is ignored.
 
 # Quick -----------------------------------------------------------------------
 
 # PREM spherical inputs. 
-/Users/hrmd_work/Documents/research/stoneley/output/PlanetaryModels/LLSVP/prem_0439.4_2.00_1/
-/Users/hrmd_work/Documents/research/stoneley/output/NormalModes/prem_0439.4_2.00_1_00.10_01.00_1/
-quick
-10
-all
+
 
 # PREM spheroid inputs. 
 /Users/hrmd_work/Documents/research/stoneley/output/PlanetaryModels/LLSVP/prem_spheroid_0439.4_2.00_1/
