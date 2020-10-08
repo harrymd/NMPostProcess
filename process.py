@@ -1700,7 +1700,7 @@ def vsh_projection_quick_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, save_
         
         # Use the pool to analyse the modes specified by num_span.
         # Note that the partial() function is used to meet the requirement of pool.map() of a pickleable function with a single input.
-        pool.map(partial(vsh_projection_quick, dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, r_discons, save_spatial = False), i_mode_list)
+        pool.map(partial(vsh_projection_quick, dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, save_spatial = False), i_mode_list)
 
     return
 
