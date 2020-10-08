@@ -1665,7 +1665,7 @@ def vsh_projection_quick_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, save
         print('\nProcessing mode: {:>5d}'.format(i_mode))
 
         # Do the projection. 
-        vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, r_discons, i_mode, save_spatial = save_spatial)
+        vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, i_mode, save_spatial = save_spatial)
 
     return
 
