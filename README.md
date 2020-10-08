@@ -61,10 +61,12 @@ A successful *NormalModes* run will produce the files listed below, in a single 
 
 1. The mode files (e.g. `mod.1_JOB1_pod1_np48_0.1000000_1.000000_1.dat`). There is one file per mode, and they are listed in order of increasing frequency, as indicated by the final integer in the file name. Each file contains displacement  vector field for one mode: the three components of the mode's displacement at each solution point (including second-order points).
 2. The vertex index file (e.g. `mod.1_pod1_np48_vlist.dat`). The vertex indices are integers (one per solution point) which map between the solution points and the mesh node points. This is necessary because some node points have displacement specified twice, on either side of a boundary. For more information, see the docstring for `process.read_eigenvector()`.
-3. The vertex attribute file (e.g. `mod.1_pod1_np48_stat.dat`). The vertex attributes are integers (one per mesh node) indicating whether the grid point is solid, fluid, or solid-fluid, and whether it is a first- or second-order point. For more information, see the docstring for `process.read_eigenvector()`.
+3. The vertex attribute file (e.g. `mod.1_pod1_np48_stat.dat`). The vertex attributes are integers (one per mesh node) indicating whether the grid point is solid, fluid, or solid-fluid, and whether it is a first- or second-order point*. For more information, see the docstring for `process.py`.
 4. The `sbatch` standard output log (e.g. `LLSVP_6222017.txt`). This contains detailed progress information as well as printing out the relative errors and the mode frequencies. Alternatively, some versions of *NormalModes* produce a file `*eigs.txt` which is an increasing list of the squares of the angular frequencies in radians per second. Only one of these two files can be present (because `process.py` searches for a file ending in `.txt`).
 5. The log file (e.g. `mod.1_0.log`) contains brief progress information output by the code. Sometimes it is useful for error messages or timing information.
 6. The `sbatch` error log (e.g. `LLSVP_6222017.err`). Hopefully this file will be empty or only contain warnings, but if something goes wrong, it will be reported here.
+
+*Note that second-order points are discarded immediately. Typically, this does not degrade the analysis of the displacement patterns, because the number of nodes required to accurately resolve the frequencies is much larger than the number of nodes is required to accurately resolve the displacement patterns.
 
 All the `.dat` files (items 1, 2 and 3 above) are stored in a *Fortran* binary format. They can be read in *Python* using `numpy.fromfile()`, e.g.
 
