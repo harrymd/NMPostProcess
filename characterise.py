@@ -73,7 +73,7 @@ def characterise_all_modes_quick(dir_NM):
 
     # Define directories.
     dir_processed = os.path.join(dir_NM, 'processed')
-    
+
     # Loop over all modes.
     first_iteration = True
     for i, i_mode in enumerate(i_mode_list):

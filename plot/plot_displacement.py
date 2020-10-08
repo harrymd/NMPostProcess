@@ -22,7 +22,7 @@ import  shtns
 
 # Local modules.
 from common         import convert_complex_sh_to_real, get_list_of_modes_from_coeff_files, load_vsh_coefficients, make_l_and_m_lists, mkdir_if_not_exist, read_input_NMPostProcess, read_input_plotting
-from plot.common import save_figure
+from plot.plot_common import save_figure
 from process        import project_from_spherical_harmonics 
 
 def region_int_to_title(region, radius, shell_name_path = None):

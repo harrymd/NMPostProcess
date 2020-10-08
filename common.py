@@ -221,6 +221,27 @@ def load_vsh_coefficients(dir_NM, i_mode, i_radius = None):
 
     return Ulm, Vlm, Wlm, r_sample, i_sample, header_info 
 
+def load_all_vsh_coefficients(dir_NM, i_mode_list):
+    
+    n_mode = len(i_mode_list)
+
+    first_iteration = True
+    for i, i_mode in enumerate(i_mode_list):
+
+        Ulm_i, Vlm_i, Wlm_i, _, _, _ = load_vsh_coefficients(dir_NM, i_mode)
+
+        if first_iteration:
+
+            n_coeff = len(Ulm_i)
+            coeffs = np.zeros((n_mode, 3, n_coeff), dtype = Ulm_i.dtype)
+            first_iteration = False
+
+        coeffs[i, 0, :] = Ulm_i
+        coeffs[i, 1, :] = Vlm_i
+        coeffs[i, 2, :] = Wlm_i
+
+    return coeffs
+
 def read_input_NMPostProcess():
 
     # Read the input file.

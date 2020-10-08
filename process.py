@@ -260,7 +260,9 @@ def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer,
     surface_condition, j_surface = get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer)
 
     # Find all interior nodes (must remove the surface nodes).
+    # Note: Assume higher-order nodes (3, 4) have already been removed.
     interior_condition = (((node_attbs == 0) | (node_attbs == 1)) & ~surface_condition)
+    #interior_condition = (((node_attbs == 0) | (node_attbs == 1) | (node_attbs == 3) | (node_attbs == 4)) & ~surface_condition)
     j_interior_sample = np.where(interior_condition)[0]
 
     # Case 1: There are no interior discontinuities.
@@ -615,8 +617,8 @@ def pre_process(dir_PM, dir_NM):
         r_discons, state_outer = read_discon_file(path_discon_info)
 
         # Load sample index and attribute information.
-        node_idxs, node_attbs = load_sample_indices_and_attribs(dir_NM)
-            
+        node_idxs, node_attbs, i_first_order = load_sample_indices_and_attribs(dir_NM)
+
         # Get list of indices of samples in regions (interiors and boundaries).
         _, _, index_lists = get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default')
 
@@ -742,19 +744,28 @@ def load_sample_indices_and_attribs(dir_NM):
     path_vstat_regex = os.path.join(dir_NM, '*_vstat.dat')
     path_vstat = glob(path_vstat_regex)[0]
     node_attbs  = np.fromfile(path_vstat, dtype = '<i')
-    
+
     # Print a vertex attribute summary.
     unique_node_attbs = np.unique(node_attbs)
     n_nodes_by_attb = [np.sum(node_attbs == i) for i in unique_node_attbs]
     print('Vertex attribute summary:')
-    for i in unique_node_attbs: 
+    for i in unique_node_attbs:
 
         print('{:2d} {:6d}'.format(i, n_nodes_by_attb[i]))
-    
+
     # Calculate the number of nodes and the number of samples.
     # (See 'Definitions of variables' for an explanation.)
     n_nodes = node_idxs.shape[0]
-    n_samples = n_nodes_by_attb[0] + n_nodes_by_attb[1] + 2*n_nodes_by_attb[2]
+    n_samples = 0
+    for j, attb in enumerate(unique_node_attbs):
+
+        if (attb == 2) or (attb == 5):
+
+            n_samples = n_samples + 2*n_nodes_by_attb[j]
+
+        else:
+
+            n_samples = n_samples + n_nodes_by_attb[j]
 
     # Insert a new vertex attribute for the each of the fluid-solid boundary
     # nodes, so we can distinguish between the eigenvector on the fluid side
@@ -794,7 +805,12 @@ def load_sample_indices_and_attribs(dir_NM):
     node_idxs   = node_idxs_new
     node_attbs  = node_attbs_new
 
-    return node_idxs, node_attbs
+    # Discard information about second-order nodes.
+    i_first_order   = np.where((node_attbs == 0) | (node_attbs == 1) | (node_attbs == 2) | (node_attbs == 6))[0]
+    node_idxs   = node_idxs[i_first_order]
+    node_attbs  = node_attbs[i_first_order]
+
+    return node_idxs, node_attbs, i_first_order
 
 def read_eigenvector(i_mode, path_eigvec_base):
     '''
@@ -918,7 +934,7 @@ def read_info_for_projection(dir_PM, dir_NM):
     nodes = np.loadtxt(path_nodes)
 
     # Read sample indices and attributes.
-    node_idxs, node_attbs = load_sample_indices_and_attribs(dir_NM)
+    node_idxs, node_attbs, i_first_order = load_sample_indices_and_attribs(dir_NM)
 
     # Read the discontinuity radius information.
     path_discon_info = os.path.join(dir_PM, 'radii.txt')
@@ -928,7 +944,7 @@ def read_info_for_projection(dir_PM, dir_NM):
     # Read lists of indices of samples in interior regions and on discontinuities.
     index_lists = read_index_lists(dir_NM) 
 
-    return nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists 
+    return nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists, i_first_order
 
 def get_eigvec_path_base(dir_NM):
     '''
@@ -1433,7 +1449,7 @@ def project_from_spherical_harmonics(sh_calculator, Ulm, Vlm, Wlm):
     return Pr, Ve, Vn, We, Wn
 
 # Vector-spherical-harmonic projection at one radius ('quick mode'). ----------
-def pre_projection(dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, r_discons, i_mode):
+def pre_projection(dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, i_mode):
     '''
     Load mode information, discard second-order nodes, find maximum displacement and normalise eigenvector.
     '''
@@ -1447,12 +1463,17 @@ def pre_projection(dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs
     # Read the information about the mode.
     freq, eigvec = read_mode(dir_NM, i_mode, eigvec_path_base)
 
-    # Discard information about second-order nodes.
-    i_allowed   = np.where((node_attbs == 0) | (node_attbs == 1) | (node_attbs == 2) | (node_attbs == 6))[0]
-    node_idxs   = node_idxs[i_allowed]
-    node_attbs  = node_attbs[i_allowed]
-    eigvec      = eigvec[i_allowed, :]
-    index_lists = [np.intersect1d(x, i_allowed) for x in index_lists]
+    # Discard information about second-order nodes from the eigvec list.
+    eigvec      = eigvec[i_first_order, :]
+
+    #i_allowed   = np.where((node_attbs == 0) | (node_attbs == 1) | (node_attbs == 2) | (node_attbs == 6))[0]
+    ##print(i_allowed)
+    ##print(i_allowed.shape)
+    ##print(node_attbs.shape)
+    #node_idxs   = node_idxs[i_allowed]
+    #node_attbs  = node_attbs[i_allowed]
+    #eigvec      = eigvec[i_allowed, :]
+    #index_lists = [np.intersect1d(x, i_allowed) for x in index_lists]
 
     # Find the radial coordinate where the largest displacement occurs.
     r_max, i_region_max, eigvec_max = find_r_max(nodes, node_idxs, eigvec, index_lists, r_min = 0.1*r_discons[0])
@@ -1519,7 +1540,7 @@ def save_spectral(dir_processed, i_mode, coeffs, header_info):
 
     return
 
-def vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, r_discons, i_mode, save_spatial = False):
+def vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, i_mode, save_spatial = False):
     '''
     Calculate vector-spherical-harmonic coefficients of displacement field at the radius of maximum displacement.
 
@@ -1536,7 +1557,7 @@ def vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_id
     # Load mode information, discard second-order nodes, find maximum displacement and normalise eigenvector.
     n_lat_grid, dir_processed, freq, node_idxs, node_attbs, eigvec, \
     index_lists, r_max, i_region_max, eigvec_max = pre_projection(
-            dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, r_discons, i_mode)
+            dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, i_mode)
 
     # Interpolate, calculate unit vectors, project along unit vectors, and transform from vector components to vector spherical harmonics.
     Ulm, Vlm, Wlm = process_one_depth(None, r_max, i_region_max, nodes, node_idxs, eigvec, index_lists, n_lat_grid, l_max)
@@ -1606,11 +1627,11 @@ def vsh_projection_quick_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base
     dir_processed = os.path.join(dir_NM, 'processed')
 
     # Read various information about the mesh.
-    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists = \
+    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists, i_first_order = \
             read_info_for_projection(dir_PM, dir_NM)
 
     # Do the projection. 
-    vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, r_discons, i_mode, save_spatial = save_spatial)
+    vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, i_mode, save_spatial = save_spatial)
 
     return
 
@@ -1632,7 +1653,7 @@ def vsh_projection_quick_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, save
     dir_processed = os.path.join(dir_NM, 'processed')
 
     # Read various information about the mesh.
-    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists = \
+    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists, i_first_order = \
             read_info_for_projection(dir_PM, dir_NM)
 
     # Get a list of modes.
@@ -1666,7 +1687,7 @@ def vsh_projection_quick_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, save_
     dir_processed = os.path.join(dir_NM, 'processed')
 
     # Read various information about the mesh.
-    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists = \
+    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists, i_first_order = \
             read_info_for_projection(dir_PM, dir_NM)
 
     # Get a list of modes.
@@ -1804,7 +1825,7 @@ def remove_interpolant_files(path_interpolator_fmt, i_sample):
 
     return
 
-def vsh_projection_full(dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, r_discons, r_sample, i_sample, i_mode):
+def vsh_projection_full(dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, r_sample, i_sample, i_mode):
     '''
     Perform VSH projection at specified radial coordinates.
     '''
@@ -1816,7 +1837,7 @@ def vsh_projection_full(dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_
     # Load mode information, discard second-order nodes, find maximum displacement and normalise eigenvector.
     n_lat_grid, dir_processed, freq, node_idxs, node_attbs, eigvec, \
     index_lists, r_max, i_region_max, eigvec_max = pre_projection(
-            dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, r_discons, i_mode)
+            dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, i_mode)
 
     # Loop over the different sampling radii.
     n_coeffs = (l_max + 1)*(l_max + 2)//2
@@ -1868,7 +1889,7 @@ def vsh_projection_full_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base,
     #path_interpolator_fmt = os.path.join(dir_processed, 'interpolator_{:>05d}_{:}.pkl'.format(i_mode, '{:>03d}'))
 
     # Read various information about the mesh.
-    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists = \
+    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists, i_first_order = \
             read_info_for_projection(dir_PM, dir_NM)
 
     # Get the sampling radii.
@@ -1877,7 +1898,7 @@ def vsh_projection_full_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base,
     # Perform the VSH projection at each radius.
     coeffs, eigvec_max, r_max, i_region_max = \
         vsh_projection_full(dir_NM, l_max, eigvec_path_base, nodes, node_idxs,
-            node_attbs, index_lists, r_discons, r_sample, i_sample, i_mode)
+            node_attbs, index_lists, i_first_order, r_discons, r_sample, i_sample, i_mode)
 
     return
 
@@ -1899,7 +1920,7 @@ def vsh_projection_full_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, n_rad
     dir_processed = os.path.join(dir_NM, 'processed')
 
     # Read various information about the mesh.
-    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists = \
+    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists, i_first_order = \
             read_info_for_projection(dir_PM, dir_NM)
 
     # Get the sampling radii.
@@ -1917,7 +1938,7 @@ def vsh_projection_full_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, n_rad
         #path_interpolator_fmt = os.path.join(dir_processed, 'interpolator_{:>05d}_{:}.pkl'.format(i_mode, '{:>03d}'))
         coeffs, eigvec_max, r_max, i_region_max = \
             vsh_projection_full(dir_NM, l_max, eigvec_path_base, nodes, node_idxs,
-                node_attbs, index_lists, r_discons, i_mode, r_sample, i_sample)
+                node_attbs, index_lists, i_first_order, r_discons, i_mode, r_sample, i_sample)
 
     return
 
@@ -1939,7 +1960,7 @@ def vsh_projection_full_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, n_radi
     dir_processed = os.path.join(dir_NM, 'processed')
 
     # Read various information about the mesh.
-    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists = \
+    nodes, node_idxs, node_attbs, r_discons, state_outer, n_discons, index_lists, i_first_order = \
             read_info_for_projection(dir_PM, dir_NM)
 
     # Get the sampling radii.
@@ -1955,7 +1976,7 @@ def vsh_projection_full_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, n_radi
         
         # Use the pool to analyse the modes specified by num_span.
         # Note that the partial() function is used to meet the requirement of pool.map() of a pickleable function with a single input.
-        pool.map(partial(vsh_projection_full, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, r_discons, r_sample, i_sample), i_mode_list)
+        pool.map(partial(vsh_projection_full, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, r_sample, i_sample), i_mode_list)
 
     return
 

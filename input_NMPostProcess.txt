@@ -1,10 +1,12 @@
-/scratch/06414/tg857131/PlanetaryModels/output/LLSVP/prem_0303.7_2.00_1/
-/scratch/06414/tg857131/NormalModes/output/prem_0303.7_2.00_1_00.10_01.00_1/
+/Users/hrmd_work/Documents/research/stoneley/output/PlanetaryModels/LLSVP/llsvp_a_0439.4_2.00_2/
+/Users/hrmd_work/Documents/research/stoneley/output/NormalModes/llsvp_a_0439.4_2.00_2_02.90_03.80_2/
 quick
-10
-all
+32
+1
 
 # Anything below is ignored.
+/Users/hrmd_work/Documents/research/stoneley/output/PlanetaryModels/LLSVP/prem_0303.7_2.00_1/
+/Users/hrmd_work/Documents/research/stoneley/output/NormalModes/prem_0303.7_2.00_1_00.10_01.00_1/
 
 # Quick -----------------------------------------------------------------------
 
@@ -30,6 +32,12 @@ quick
 full 20
 10
 parallel
+
+/scratch/06414/tg857131/PlanetaryModels/output/LLSVP/prem_0303.7_2.00_1/
+/scratch/06414/tg857131/NormalModes/output/prem_0303.7_2.00_1_00.10_01.00_1/
+quick
+10
+all
 
 # Full. -----------------------------------------------------------------------
 

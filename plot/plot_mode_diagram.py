@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Load local modules.
-from common import lf_clusters, read_eigenvalues
+from common import mkdir_if_not_exist, lf_clusters, read_eigenvalues, read_input_NMPostProcess
 
 # Utilities. ------------------------------------------------------------------
 def label_multiplets(ax, cluster_multiplicities, l_clusters, f_cluster_means, missing_modes = None):
@@ -189,7 +189,9 @@ def plot_mode_diagram_wrapper(dir_NM):
 
     # Define directories and files.
     dir_processed = os.path.join(dir_NM, 'processed')
-    path_fig = os.path.join(dir_processed, 'plots', 'mode_diagram.png')
+    dir_plot = os.path.join(dir_processed, 'plots')
+    mkdir_if_not_exist(dir_plot)
+    path_fig = os.path.join(dir_plot, 'mode_diagram.png')
 
     # Load the mode identification information.
     path_ids = os.path.join(dir_processed, 'mode_ids_quick.txt')

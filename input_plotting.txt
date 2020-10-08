@@ -1,6 +1,6 @@
-full all 
-spectral
-149
+quick
+spatial 90
+1
 png
 
 # The lines below are ignored.
