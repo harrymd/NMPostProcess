@@ -1,6 +1,6 @@
 quick
-spatial 90
-1
+spectral 90
+106
 png
 
 # The lines below are ignored.

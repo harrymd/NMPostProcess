@@ -206,39 +206,68 @@ def load_vsh_coefficients(dir_NM, i_mode, i_radius = None):
 
         if i_radius == 'all':
 
-            return coeffs, header_info
+            i_sample = None
+            r_sample = None
 
-        coeffs = coeffs[i_radius, ...]
-        i_sample = header_info['i_sample'][i_radius]
-        r_sample = header_info['r_sample'][i_radius]
+        else:
+
+            coeffs = coeffs[i_radius, ...]
+            i_sample = header_info['i_sample'][i_radius]
+            r_sample = header_info['r_sample'][i_radius]
 
     else:
 
         i_sample = header_info['i_sample'][0]
         r_sample = header_info['r_sample'][0]
 
-    Ulm, Vlm, Wlm = coeffs
+    #Ulm, Vlm, Wlm = coeffs
+    #return Ulm, Vlm, Wlm, r_sample, i_sample, header_info 
 
-    return Ulm, Vlm, Wlm, r_sample, i_sample, header_info 
+    return coeffs, header_info, r_sample, i_sample
 
-def load_all_vsh_coefficients(dir_NM, i_mode_list):
-    
+def load_all_vsh_coefficients(dir_NM, i_mode_list, option = 'quick'):
+
+    if option == 'quick':
+
+        i_radius = None
+
+    elif option == 'full':
+
+        i_radius = 'all'
+
+    else:
+
+        raise ValueError
+
     n_mode = len(i_mode_list)
 
     first_iteration = True
     for i, i_mode in enumerate(i_mode_list):
 
-        Ulm_i, Vlm_i, Wlm_i, _, _, _ = load_vsh_coefficients(dir_NM, i_mode)
+        #Ulm_i, Vlm_i, Wlm_i, _, _, _ = load_vsh_coefficients(dir_NM, i_mode, i_radius = i_radius)
+        coeffs_i, _, _, _ = load_vsh_coefficients(dir_NM, i_mode, i_radius = i_radius)
 
         if first_iteration:
 
-            n_coeff = len(Ulm_i)
-            coeffs = np.zeros((n_mode, 3, n_coeff), dtype = Ulm_i.dtype)
+            if option == 'quick':
+
+                n_radii = 1
+
+            elif option == 'full':
+
+                n_radii = coeffs_i.shape[0]
+
+            n_coeff = coeffs_i.shape[-1] 
+            coeffs = np.zeros((n_mode, n_radii, 3, n_coeff), dtype = coeffs_i.dtype)
             first_iteration = False
 
-        coeffs[i, 0, :] = Ulm_i
-        coeffs[i, 1, :] = Vlm_i
-        coeffs[i, 2, :] = Wlm_i
+        coeffs[i, :, 0, :] = coeffs_i[..., 0, :] 
+        coeffs[i, :, 1, :] = coeffs_i[..., 1, :] 
+        coeffs[i, :, 2, :] = coeffs_i[..., 2, :] 
+
+    if option == 'quick':
+
+        coeffs = np.squeeze(coeffs)
 
     return coeffs
 

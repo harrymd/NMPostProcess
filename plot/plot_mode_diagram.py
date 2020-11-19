@@ -131,14 +131,24 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
     # Create axes (if none are supplied).
     if ax is None:
 
-        fig = plt.figure(figsize = (5.0, 5.0), tight_layout = True)
+        fig = plt.figure(figsize = (8.0, 6.0), tight_layout = True)
         ax = plt.gca()
 
     # Loop over the different kinds of mode.
+    c_dict = {'R' : 'red', 'S' : 'blue', 'T0' : 'orange', 'T2' : 'green'}
     for type_ in mode_info:
 
+        if type_ in c_dict.keys():
+
+            c = c_dict[type_]
+
+        else:
+
+            c = None
+
         # Plot a point (l, f) for each mode of this type.
-        ax.scatter(mode_info[type_]['l'], mode_info[type_]['f'], label = type_)
+        ax.scatter(mode_info[type_]['l'], mode_info[type_]['f'], label = type_,
+                    c = c)
 
     # Label mode clusters.
     if label_clusters:
@@ -161,6 +171,9 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
     ax.set_xlabel('Angular order, $\ell$', fontsize = fontsize_label)
     ax.set_ylabel('Frequency (mHz)', fontsize = fontsize_label)
 
+    ax.set_xlim([0.0, 32.0])
+    ax.set_ylim([2.9, 3.8])
+
     # Save figure (if requested).
     if path_fig is not None:
 
@@ -174,7 +187,7 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
 
     return
 
-def plot_mode_diagram_wrapper(dir_NM):
+def plot_mode_diagram_wrapper(dir_NM, option):
     '''
     Reads mode information files and plots angular order versus frequency.
 
@@ -191,10 +204,10 @@ def plot_mode_diagram_wrapper(dir_NM):
     dir_processed = os.path.join(dir_NM, 'processed')
     dir_plot = os.path.join(dir_processed, 'plots')
     mkdir_if_not_exist(dir_plot)
-    path_fig = os.path.join(dir_plot, 'mode_diagram.png')
+    path_fig = os.path.join(dir_plot, 'mode_diagram_{:}.png'.format(option))
 
     # Load the mode identification information.
-    path_ids = os.path.join(dir_processed, 'mode_ids_quick.txt')
+    path_ids = os.path.join(dir_processed, 'mode_ids_{:}.txt'.format(option))
     i_mode, l, type_, shell = np.loadtxt(path_ids, dtype = np.int).T
 
     # Read the mode frequency. 
@@ -241,7 +254,7 @@ def main():
     dir_PM, dir_NM, option, l_max, i_mode_str, n_radii = read_input_NMPostProcess()
 
     # Plot the mode diagram.
-    plot_mode_diagram_wrapper(dir_NM)
+    plot_mode_diagram_wrapper(dir_NM, option)
 
 if __name__ == '__main__':
 

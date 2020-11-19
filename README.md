@@ -152,7 +152,7 @@ which is controlled by the input file `input_plotting.txt`. The first line of th
 
  A spatial plot displays a map representation of the three components (radial, consoidal and spheroidal) of the vector field in three panels. Here we have an example of a low-frequency mode of a spherically-symmetric Earth model, neglecting gravity:
  
-![](example_plots/displacement.png "Example of a spatial plot.")
+<img src="example_plots/displacement.png" width = 50%>
 
 We can see this mode is a spheroidal mode (no toroidal component). Note that the consoidal and toroidal components (lower two panels) are surface vector fields with both a direction (indicated by arrows) and a magnitude. Their magnitude is shown using only the positive part of the colour bar. The radial component (top panel) has a fixed direction can be positive (outwards) or negative (inward).
 
@@ -188,7 +188,7 @@ png			# Figure output format ('png' or 'pdf').
 
 we get a spectral plot:
 
-![](example_plots/spectrum.png "Example of a spectral plot.")
+<img src="example_plots/spectrum.png" width = 50%>
 
 This shows the VSH coefficients (radial <img src="https://render.githubusercontent.com/render/math?math=U_{lm}">, consoidal <img src="https://render.githubusercontent.com/render/math?math=V_{lm}"> and toroidal <img src="https://render.githubusercontent.com/render/math?math=W_{lm}">). They have been converted from complex to real format (so they range from <img src="https://render.githubusercontent.com/render/math?math=m = -\ell_{max}"> to <img src="https://render.githubusercontent.com/render/math?math=\ell_{max}">). We can see that this mode is dominantly spheroidal with <img src="https://render.githubusercontent.com/render/math?math=\ell = 3">. We also know the frequency of the mode (0.415 mHz) from the `eigenvalue_list.txt` file. Comparison with calculations of a spherically-symmetric Earth then allows us to identify this mode as one of the seven nearly-degenerate modes of Earth's <img src="https://render.githubusercontent.com/render/math?math=_{0}\text{S}_{3}"> multiplet.
 
@@ -234,7 +234,7 @@ python3 plot/plot_mode_diagram.py
 
 which produces a plot such as
 
-![](example_plots/mode_diagram.png "Example of a mode diagram.")
+<img src="example_plots/mode_diagram.png" width = 60%>
 
 This plot shows all of the spheroidal, toroidal and radial modes, as indicated in the legend. Note that 'T0' indicates 'toroidal modes from shell 0' where shell 0 is the outermost shell, in this case the mantle. At higher frequencies, we would also expect T2 modes (inner-core toroidal modes).
 
@@ -273,7 +273,21 @@ spatial 90 	# 'spatial n_lat' or 'spectral'.
 png			# Figure output format ('png' or 'pdf').
 ```
 
-would produce a full-projection spatial plot for mode 15 at all of the radial slices defined during the processing step. Note that the mode ID can also be 'all', but this will take a long time. As before, changing 'spatial' to 'spectral' will yield a spectral plot for each specified depth slice.
+would produce a full-projection spatial plot for mode 15 at all of the radial slices defined during the processing step. Note that the mode ID can also be 'all', but this will take a long time. As before, changing 'spatial' to 'spectral' will yield a spectral plot for each specified depth slice. The animation below shows the displacement pattern for low-frequency mode of a large planet:
+
+<img src="example_plots/displacement_full.gif" width = 50%>
+
+The indiviudal PNG files were stitched into a GIF using the following *ImageMagick* command:
+`convert -dispose previous -delay 20 -loop 0 displacement_full_00015_0* displacement_full_00015.gif`
+where `-dipose previous` is necessary with the transparent background.
+
+To plot the variation in the *U*, *V* and *W* components as a function of radius, run the command
+
+`python3 plot/plot_eigenfunction.py`
+
+As before, the mode is specific in the `input_plotting.txt` file (the other lines are ignored). This will create a plot such as this:
+
+<img src="example_plots/eigenfunction.png" width = 50%>
 
 <a href="#top">Back to top</a>
 

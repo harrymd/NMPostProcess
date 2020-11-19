@@ -434,7 +434,7 @@ def plot_sh_real_coeffs_3_comp_wrapper(dir_NM, i_mode, show = True, fmt = 'pdf',
 
     if i_radius_str == 'all':
 
-        _, _, _, _, _, header_info = load_vsh_coefficients(dir_NM, i_mode, 0)
+        _, header_info, _, _ = load_vsh_coefficients(dir_NM, i_mode, 0)
         n_samples = len(header_info['r_sample'])
 
         i_radius_list = list(range(n_samples))
@@ -447,11 +447,22 @@ def plot_sh_real_coeffs_3_comp_wrapper(dir_NM, i_mode, show = True, fmt = 'pdf',
 
         i_radius_list = [int(i_radius_str)]
 
+    fixed_scale = False
+    if fixed_scale:
+
+        c_max = 0.3
+
+    else:
+
+        c_max = None
+
     first_iteration = True
     for j_radius in i_radius_list:
 
         # Load VSH coefficients.
-        Ulm, Vlm, Wlm, r_sample, i_sample, _ = load_vsh_coefficients(dir_NM, i_mode, j_radius)
+        #Ulm, Vlm, Wlm, r_sample, i_sample, _ = load_vsh_coefficients(dir_NM, i_mode, j_radius)
+        coeffs, _, r_sample, i_sample = load_vsh_coefficients(dir_NM, i_mode, j_radius)
+        Ulm, Vlm, Wlm = coeffs
         
         first_iteration = True
         if first_iteration:
@@ -470,6 +481,11 @@ def plot_sh_real_coeffs_3_comp_wrapper(dir_NM, i_mode, show = True, fmt = 'pdf',
         vlm, _, _ = convert_complex_sh_to_real(Vlm, l_max)
         wlm, _, _ = convert_complex_sh_to_real(Wlm, l_max)
 
+        # Multiply V and W by k.
+        k = np.sqrt(l*(l + 1.0))
+        vlm = k*vlm
+        wlm = k*wlm
+
         ## Generate the l and m lists.
         #l, m = make_l_and_m_lists(l_max)
 
@@ -481,7 +497,7 @@ def plot_sh_real_coeffs_3_comp_wrapper(dir_NM, i_mode, show = True, fmt = 'pdf',
                 ax_arr      = None,
                 show        = False,
                 flip        = True,
-                c_max       = None,
+                c_max       = c_max,
                 abs_plot    = False)
 
         # Save the plot.
