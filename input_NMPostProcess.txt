@@ -1,8 +1,14 @@
+<<<<<<< HEAD
 /Users/hrmd_work/Documents/research/stoneley/output/PlanetaryModels/LLSVP/llsvp_b_303.7_2.00_2/
 /Users/hrmd_work/Documents/research/stoneley/output/NormalModes/llsvp_b_303.7_2.00_2_02.90_03.80_2/
 full 20
+=======
+/scratch/06414/tg857131/PlanetaryModels/output/LLSVP/llsvp_a_439.4_2.00_2/
+/scratch/06414/tg857131/NormalModes/output/llsvp_a_439.4_2.00_2_02.90_03.80_2/
+quick
+>>>>>>> origin/master
 32
-1
+all
 
 # Anything below is ignored.
 /Users/hrmd_work/Documents/research/stoneley/output/PlanetaryModels/LLSVP/prem_0303.7_2.00_1/
@@ -11,9 +17,12 @@ full 20
 /Users/hrmd_work/Documents/research/stoneley/output/PlanetaryModels/LLSVP/llsvp_a_0439.4_2.00_2/
 /Users/hrmd_work/Documents/research/stoneley/output/NormalModes/llsvp_a_0439.4_2.00_2_02.90_03.80_2/
 
+<<<<<<< HEAD
 /Users/hrmd_work/Documents/research/stoneley/output/PlanetaryModels/LLSVP/llsvp_b_303.7_2.00_2/
 /Users/hrmd_work/Documents/research/stoneley/output/NormalModes/llsvp_b_303.7_2.00_2_02.90_03.80_2/
 
+=======
+>>>>>>> origin/master
 # Quick -----------------------------------------------------------------------
 
 # PREM spherical inputs. 
