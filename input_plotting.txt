@@ -1,6 +1,7 @@
 quick
-spectral 90
-106
+spatial 90
+10
 png
+complex 23.93450
 
 # The lines below are ignored.

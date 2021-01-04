@@ -154,7 +154,7 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
     if label_clusters:
 
         f_max = np.max([np.max(mode_info[type_]['f']) for type_ in mode_info])
-        f_tol = 0.01*f_max
+        f_tol = 0.02*f_max
 
         for type_ in mode_info:
 
@@ -171,8 +171,8 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
     ax.set_xlabel('Angular order, $\ell$', fontsize = fontsize_label)
     ax.set_ylabel('Frequency (mHz)', fontsize = fontsize_label)
 
-    ax.set_xlim([0.0, 32.0])
-    ax.set_ylim([2.9, 3.8])
+    #ax.set_xlim([0.0, 32.0])
+    #ax.set_ylim([2.9, 3.8])
 
     # Save figure (if requested).
     if path_fig is not None:
