@@ -1,53 +1,8 @@
-/scratch/06414/tg857131/PlanetaryModels/output/LLSVP/llsvp_a_439.4_2.00_2/
-/scratch/06414/tg857131/NormalModes/output/llsvp_a_439.4_2.00_2_02.90_03.80_2/
+/Users/hrmd_work/Documents/research/stoneley/output/Magrathea/v5/prem_0219.7_300/
+/Users/hrmd_work/Documents/research/stoneley/output/NormalModes/v5/prem_0219.7_300_1_00.10_01.00_6/without_anomaly/
 quick
-32
-all
-
-# Anything below is ignored.
-/Users/hrmd_work/Documents/research/stoneley/output/PlanetaryModels/LLSVP/prem_0303.7_2.00_1/
-/Users/hrmd_work/Documents/research/stoneley/output/NormalModes/prem_0303.7_2.00_1_00.10_01.00_1/
-
-/Users/hrmd_work/Documents/research/stoneley/output/PlanetaryModels/LLSVP/llsvp_a_0439.4_2.00_2/
-/Users/hrmd_work/Documents/research/stoneley/output/NormalModes/llsvp_a_0439.4_2.00_2_02.90_03.80_2/
-
-# Quick -----------------------------------------------------------------------
-
-# PREM spherical inputs. 
-
-
-# PREM spheroid inputs. 
-/Users/hrmd_work/Documents/research/stoneley/output/PlanetaryModels/LLSVP/prem_spheroid_0439.4_2.00_1/
-/Users/hrmd_work/Documents/research/stoneley/output/NormalModes/prem_spheroid_0439.4_2.00_1_00.10_01.00_1/
-quick
-10
-all
-
-# Saturn polytrope inputs.
-/Users/hrmd_work/Documents/research/gas_giants/data/inputs/Polytrope/sat_m5_ntess_5_pOrder_1/
-/Users/hrmd_work/Documents/research/gas_giants/data/outputs/Polytrope/sat_m5_ntess_5_pOrder_1/
-quick
-10
-1
-
-/scratch/06414/tg857131/gas_giants/data/inputs/Polytrope/sat_m5_ntess_5_pOrder_1/
-/scratch/06414/tg857131/gas_giants/data/outputs/Polytrope/sat_m5_ntess_5_pOrder_1/
-full 20
 10
 parallel
 
-/scratch/06414/tg857131/PlanetaryModels/output/LLSVP/prem_0303.7_2.00_1/
-/scratch/06414/tg857131/NormalModes/output/prem_0303.7_2.00_1_00.10_01.00_1/
-quick
-10
-all
-
-# Full. -----------------------------------------------------------------------
-
-# PREM spherical inputs. 
-/Users/hrmd_work/Documents/research/stoneley/output/PlanetaryModels/LLSVP/prem_0439.4_2.00_1/
-/Users/hrmd_work/Documents/research/stoneley/output/NormalModes/prem_0439.4_2.00_1_00.10_01.00_1/
-full
-10
-1
-20
+/Users/hrmd_work/Documents/research/stoneley/output/Magrathea/v4/prem_0473.4_300/
+/Users/hrmd_work/Documents/research/stoneley/output/NormalModes/v4/prem_0473.4_300_1_00.10_01.00_6/without_anomaly/
