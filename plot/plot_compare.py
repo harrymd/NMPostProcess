@@ -10,8 +10,6 @@ def main():
     # Read the NMPostProcess input file.
     _, dir_NM_1, _, _, _, _ = read_input_NMPostProcess()
 
-
-
     # Read the comparison input file.
     file_compare = 'input_compare.txt'
     with open(file_compare, 'r') as in_id:
@@ -100,8 +98,6 @@ def main():
 
     fig = plt.figure()
     ax = plt.gca()
-    
-    print(np.max(np.abs(f_diff)))
     
     ax.scatter(l_1, f_1, s = 10*1.0E3*np.abs(f_diff), c = 'k', alpha = 0.5)
     #ax.plot(i_mode_1, f_diff_frac*1.0E2, 'k.-')

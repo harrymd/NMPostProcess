@@ -1,6 +1,7 @@
 quick
 spatial 90
-1
+all
 png
+complex 23.93450
 
 # The lines below are ignored.

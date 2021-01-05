@@ -157,12 +157,12 @@ import pickle
 import numpy as np
 from scipy.interpolate import LinearNDInterpolator 
 from scipy.spatial import ConvexHull
+from scipy.spatial import Delaunay
 import shtns
 import ssrfpy
 
 # Import local modules.
-from common import get_list_of_modes_from_output_files, mkdir_if_not_exist, read_discon_file, read_eigenvalues, read_input_NMPostProcess
-
+from common import get_list_of_modes_from_output_files, mkdir_if_not_exist, read_discon_file, read_eigenvalues, read_input_NMPostProcess, RLonLatEll_to_XYZ, XYZ_to_REll, LegendrePoly2
 # Pre-processing steps (only performed once for a given run). -----------------
 def write_eigenvalues_from_std_out_file(path_std_out, path_eigval_list = None): 
     '''
@@ -216,11 +216,18 @@ def write_eigenvalues_from_std_out_file(path_std_out, path_eigval_list = None):
                 
     return i_mode, freq
 
-def write_eigenvalues_from_eigs_txt_file(path_eigs_txt, path_eigval_list):
+def write_eigenvalues_from_eigs_txt_file(path_eigs_txt, path_eigval_list, convert_from_omega_squared = False):
 
-    omega_squared = np.loadtxt(path_eigs_txt)
-    f = np.sqrt(omega_squared)/(2.0*np.pi)
-    f_mHz = f*1.0E3
+    if convert_from_omega_squared:
+
+        omega_squared = np.loadtxt(path_eigs_txt)
+
+        f = np.sqrt(omega_squared)/(2.0*np.pi)
+        f_mHz = f*1.0E3
+
+    else:
+
+        f_mHz = np.loadtxt(path_eigs_txt) 
 
     n_modes = len(f_mHz)
 
@@ -233,7 +240,24 @@ def write_eigenvalues_from_eigs_txt_file(path_eigs_txt, path_eigval_list):
 
     return
 
-def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default'):
+def in_hull(p, hull):
+    """
+    https://stackoverflow.com/questions/16750618/
+    Test if points in `p` are in `hull`
+
+    `p` should be a `NxK` coordinates of `N` points in `K` dimensions
+    `hull` is either a scipy.spatial.Delaunay object or the `MxK` array of the 
+    coordinates of `M` points in `K`dimensions for which Delaunay triangulation
+    will be computed
+    """
+
+    if not isinstance(hull,Delaunay):
+
+        hull = Delaunay(hull)
+
+    return hull.find_simplex(p)>=0
+
+def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default', ellipticity_profile = None):
     '''
     For each region (outer surface, interior, and inner surface of each shell), find the indices of the samples belonging to that region.
 
@@ -250,20 +274,207 @@ def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer,
     r_surface = r_discons[0]
     n_discons = len(r_discons)
 
+    # Get the coordinates of the samples.
+    sample_nodes = nodes[node_idxs, :]
+
     # Get the radial coordinates of the samples.
     r_nodes = np.linalg.norm(nodes, axis = 1)
     r_samples = r_nodes[node_idxs]
 
     # Find nodes on the free surface.
     i_shell = 0
-    is_outer = True
-    surface_condition, j_surface = get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer)
+    is_outer = True 
+    surface_condition, j_surface, surface_conv_hull = get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer, ellipticity_profile = ellipticity_profile, boundary_tol = 3.0, surface_method = 'radius')
 
-    # Find all interior nodes (must remove the surface nodes).
+    print(j_surface.shape)
+
+    # Find all "interior" nodes which do not belong to any interface (must remove the surface nodes).
     # Note: Assume higher-order nodes (3, 4) have already been removed.
     interior_condition = (((node_attbs == 0) | (node_attbs == 1)) & ~surface_condition)
     #interior_condition = (((node_attbs == 0) | (node_attbs == 1) | (node_attbs == 3) | (node_attbs == 4)) & ~surface_condition)
     j_interior_sample = np.where(interior_condition)[0]
+    
+    # Case 1: There are no interior discontinuities.
+    if n_discons == 1:
+        
+        # Find samples inside the object.
+        index_lists_interior = [j_interior_sample]
+        
+        # Find samples on the surface of the object.
+        index_lists_boundaries = [j_surface]
+
+    # Case 2: There are some interior discontinuities.
+    else:
+
+        # Make a list of convex hulls, one for each discontinuity.
+        #conv_hull_list = [surface_conv_hull]
+        #conv_hull_list = []
+        in_hull_list = []
+        is_outer = True
+        for i_shell in range(1, n_discons):
+
+            _, j_discon, _ = get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default')
+            i_j_discon = node_idxs[j_discon]
+            nodes_discon = nodes[i_j_discon, :]
+            buff = 1.0E-5
+            delaunay = Delaunay(nodes_discon*(1.0 + buff))
+            #conv_hull = ConvexHull(nodes_discon)
+            #conv_hull = delaunay
+            #conv_hull_list.append(conv_hull)
+
+            in_hull_cond = in_hull(sample_nodes, delaunay)
+            in_hull_list.append(in_hull_cond)
+
+        # Initialise lists.
+        index_lists_interior = []
+        index_lists_boundaries = [j_surface]
+
+        ## Make a list of boundaries of shells (r_surface, r1, r2, ..., 0.0).
+        #r_discons_bounded = np.concatenate([r_discons, [0.0]])
+
+        # Find the indices of interior samples in each shell.
+        for i_shell in range(n_discons):
+            
+            ## Find samples at the appropriate radial distance.
+            #radius_condition = ((r_samples < r_discons_bounded[i_shell]) & (r_samples > r_discons_bounded[i_shell + 1]))
+
+            # Find condition of outer convex hull.
+            if i_shell == 0:
+
+                # All points lie within the outermost convex hull.
+                outer_hull_condition = True
+
+            else:
+
+                outer_hull_condition = in_hull_list[i_shell - 1]
+
+            # Find condition of inner convex_hull.
+            if i_shell == (n_discons - 1):
+
+                # All points lie outside the innermost hull (point 0, 0, 0).
+                inner_hull_condition = False
+
+            else:
+
+                inner_hull_condition = in_hull_list[i_shell]
+
+            # Apply the radial condition and the interior node attribute condition.
+            shell_condition = (~inner_hull_condition & outer_hull_condition & interior_condition)
+            j_shell = np.where(shell_condition)[0]
+            
+            # Store.
+            index_lists_interior.append(j_shell)
+
+        # Find the indices of boundary samples in each shell.
+        for i_shell in range(n_discons):
+
+            # Loop over the outer and inner sides of each shell.
+            # The outer surface of the outer shell has already been found.
+            if i_shell == 0:
+
+                is_outer_list = [False]
+
+            elif (i_shell < (n_discons - 1)):
+
+                is_outer_list = [True, False]
+
+            # The innermost shell does not have an inner side.
+            else:
+
+                is_outer_list = [True]
+
+            for is_outer in is_outer_list:
+                
+                # Search for the boundary samples.
+                _, j_discon, _ = get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default')
+
+                index_lists_boundaries.append(j_discon)
+
+    # Merge the lists into a single list.
+    # The list starts with the free surface and then the first interior region.
+    index_lists = [index_lists_boundaries[0], index_lists_interior[0]]
+    if len(index_lists_interior) > 1:
+
+        for i in range(1, len(index_lists_interior)):
+
+            # Between every interior region, there are two boundaries.
+            index_lists.append(index_lists_boundaries[2*i - 1])
+            index_lists.append(index_lists_boundaries[2*i])
+
+            # The next interior region.
+            index_lists.append(index_lists_interior[i])
+
+    return index_lists_interior, index_lists_boundaries, index_lists
+
+def get_indices_of_regions_old2(nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default'):
+    '''
+    For each region (outer surface, interior, and inner surface of each shell), find the indices of the samples belonging to that region.
+
+    Input:
+
+    See 'Definitions of variables.'
+
+    Output:
+
+    See 'Definitions of variables.'
+    '''
+    
+    # Get the radius of the surface and the number of discontinuities.
+    r_surface = r_discons[0]
+    n_discons = len(r_discons)
+
+    print(r_surface)
+    print(n_discons)
+    print('nodes.shape', nodes.shape)
+    print('node_attbs.shape', node_attbs.shape)
+    print('node_idxs.shape', node_idxs.shape)
+    print(state_outer)
+
+    # Get the radial coordinates of the samples.
+    r_nodes = np.linalg.norm(nodes, axis = 1)
+    r_samples = r_nodes[node_idxs]
+
+    import matplotlib.pyplot as plt
+    fig = plt.figure()
+    ax  = plt.gca()
+
+    j_0 = np.where(node_attbs == 0)[0]
+    j_1 = np.where(node_attbs == 1)[0]
+    j_2 = np.where(node_attbs == 2)[0]
+    j_6 = np.where(node_attbs == 6)[0]
+
+    for i in np.unique(node_attbs):
+        
+        j = np.where(node_attbs == i)[0]
+        print(i, len(j))
+
+    #ax.hist(r_samples[j_0])
+    #ax.hist(r_samples[j_1])
+    #ax.hist(r_samples[j_2])
+    #ax.hist(r_samples[j_6])
+    ax.hist(r_samples[r_samples <= 1221.5])
+
+    print(np.sum(r_samples < 1050.0))
+
+
+    plt.show()
+
+    # Find nodes on the free surface.
+    i_shell = 0
+    is_outer = True
+    surface_condition, j_surface = get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer)
+
+    print('j_surface.shape', j_surface.shape)
+
+    # Find all "interior" nodes which do not belong to any interface (must remove the surface nodes).
+    # Note: Assume higher-order nodes (3, 4) have already been removed.
+    interior_condition = (((node_attbs == 0) | (node_attbs == 1)) & ~surface_condition)
+    #interior_condition = (((node_attbs == 0) | (node_attbs == 1) | (node_attbs == 3) | (node_attbs == 4)) & ~surface_condition)
+    j_interior_sample = np.where(interior_condition)[0]
+    
+    print(np.sum(surface_condition))
+    print('j_interior_sample.shape', j_interior_sample.shape)
+    print(np.unique(node_attbs))
 
     # Case 1: There are no interior discontinuities.
     if n_discons == 1:
@@ -284,11 +495,19 @@ def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer,
         # Make a list of boundaries of shells (r_surface, r1, r2, ..., 0.0).
         r_discons_bounded = np.concatenate([r_discons, [0.0]])
 
+        print(r_discons_bounded)
+
+
         # Find the indices of interior samples in each shell.
         for i_shell in range(n_discons):
             
             # Find samples at the appropriate radial distance.
             radius_condition = ((r_samples < r_discons_bounded[i_shell]) & (r_samples > r_discons_bounded[i_shell + 1]))
+
+            print('\n')
+            print(i_shell)
+            print(r_discons_bounded[i_shell])
+            print(r_discons_bounded[i_shell + 1])
 
             # Apply the radial condition and the interior node attribute condition.
             shell_condition = (radius_condition & interior_condition)
@@ -336,9 +555,18 @@ def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer,
             # The next interior region.
             index_lists.append(index_lists_interior[i])
 
+    print(len(index_lists))
+    a = 0
+    for index_list in index_lists:
+
+        print(len(index_list))
+        a = a + len(index_list)
+
+    print(a)
+
     return index_lists_interior, index_lists_boundaries, index_lists
 
-def get_indices_of_regions_old(nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default'):
+def get_indices_of_regions_old1(nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default'):
     '''
     For each region (outer surface, interior, and inner surface of each shell), find the indices of the samples belonging to that region.
 
@@ -441,7 +669,7 @@ def get_indices_of_regions_old(nodes, node_attbs, node_idxs, r_discons, state_ou
 
     return index_lists_interior, index_lists_boundaries, index_lists
 
-def get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default', surface_method = 'convhull'):
+def get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default', surface_method = 'convhull', ellipticity_profile = None):
     '''
     Finds the samples of the eigvector which belong to a specified boundary.
     
@@ -462,6 +690,8 @@ def get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_d
         The indices of the samples which belong to the boundary.
     '''
 
+    conv_hull = None
+
     # Case 1: The interface is the outer surface.
     if (i_shell == 0) and is_outer:
 
@@ -470,8 +700,8 @@ def get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_d
         if surface_method == 'convhull':
         
             # Build complex hull.
-            hull = ConvexHull(nodes)
-            hull_indices = hull.simplices
+            conv_hull = ConvexHull(nodes)
+            hull_indices = conv_hull.simplices
 
             hull_indices = np.unique(hull_indices.flatten())
 
@@ -488,9 +718,29 @@ def get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_d
             if boundary_tol == 'default':
 
                 boundary_tol = r_surface*1.0E-7
+            
+            if ellipticity_profile is None:
 
-            # Find indices of allowed nodes, and discard other nodes
-            r_samples = np.linalg.norm(nodes[node_idxs], axis = 1)
+                r_samples = np.linalg.norm(nodes[node_idxs], axis = 1)
+
+            else:
+
+                r_nodes, _ = XYZ_to_REll(*nodes.T, *ellipticity_profile.T)
+                r_samples = r_nodes[node_idxs]
+                
+                #import matplotlib.pyplot as plt
+
+                #fig = plt.figure()
+                #ax = plt.gca()
+
+                #bins = np.linspace(6300, 6375, num = 76)
+
+                #plt.hist(r_nodes, bins = bins)
+
+                #ax.set_yscale('log')
+
+                #plt.show()
+
             r_min = r_surface - boundary_tol
             condition = (r_samples > r_min)
 
@@ -540,9 +790,9 @@ def get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_d
         
     j_boundary = np.where(condition)[0]
 
-    return condition, j_boundary
+    return condition, j_boundary, conv_hull
 
-def pre_process(dir_PM, dir_NM):
+def pre_process(dir_PM, dir_NM, ellipticity_profile = None):
     '''
     Perform some processing steps which only need to be done once for a given NormalModes run.
     See README.md for more information.
@@ -569,6 +819,7 @@ def pre_process(dir_PM, dir_NM):
 
         elif n_glob > 1:
             
+            print(path_eigs_glob)
             raise RuntimeError('Found more than one path matching {}, not clear which contains eigenvalue information.'.format(path_eigs_wc))
 
         path_eigs = path_eigs_glob[0]
@@ -620,8 +871,8 @@ def pre_process(dir_PM, dir_NM):
         node_idxs, node_attbs, i_first_order = load_sample_indices_and_attribs(dir_NM)
 
         # Get list of indices of samples in regions (interiors and boundaries).
-        _, _, index_lists = get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default')
-
+        _, _, index_lists = get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer, boundary_tol = 'default', ellipticity_profile = ellipticity_profile)
+        
         # Save the index list.
         print('Saving index lists file: {:}'.format(path_index_lists))
         index_list_lengths = [len(x) for x in index_lists]
@@ -670,14 +921,17 @@ def read_mesh(dir_PM):
     # tet_attrib(n_tet) A tetrahedron has an 'attribute' (integer code) which
     #           can be used to identify different regions of the model.
     path_ele_regex = os.path.join(dir_PM, '*.ele')
-    path_ele = glob(path_ele_regex)[0]
+    path_ele_regex_glob = glob(path_ele_regex)
+    path_ele_regex_glob = [x for x in path_ele_regex_glob if x[-6:] != '.b.ele']
+    assert len(path_ele_regex_glob) == 1, 'Found more than one .ele file (excluding .b.ele).'
+    path_ele = path_ele_regex_glob[0]
     mesh_info = np.loadtxt(
                     path_ele,
                     comments    = '#',
                     skiprows    = 1,
                     usecols     = (1, 2, 3, 4, 5),
                     dtype       = np.int,)
-    
+
     # Note: Here switch to 0-based indexing.
     tets        = mesh_info[:, 0:4] - 1
     tet_attrib  = mesh_info[:, 4]
@@ -687,14 +941,17 @@ def read_mesh(dir_PM):
     # [n_node]  The number of nodes.
     # nodes     (n_nodes, 3) The coordinates of each node.
     path_node_regex = os.path.join(dir_PM, '*.node')
-    path_node = glob(path_node_regex)[0]
+    path_node_regex_glob = glob(path_node_regex)
+    path_node_regex_glob = [x for x in path_node_regex_glob if x[-7:] != '.b.node']
+    assert len(path_node_regex_glob) == 1, 'Found more than one .node file (excluding .b.node).'
+    path_node = path_node_regex_glob[0]
     nodes       = np.loadtxt(
                     path_node,
                     comments    = '#',
                     skiprows    = 1,
                     usecols     = (1, 2, 3),
                     dtype       = np.float)
-                    
+
     # Find the mean of the corners of each tetrahedron.
     tet_means =     (   nodes[tets[:, 0]]
                     +   nodes[tets[:, 1]]
@@ -735,7 +992,8 @@ def load_sample_indices_and_attribs(dir_NM):
     
     # Read the vlist file (a list of vertex indices).
     path_vlist_regex = os.path.join(dir_NM, '*_vlist.dat')
-    path_vlist = glob(path_vlist_regex)[0]
+    path_vlist_glob = glob(path_vlist_regex)
+    path_vlist = path_vlist_glob[0]
     node_idxs   = np.fromfile(path_vlist, dtype = '<i')
     # Convert to 0-based indexing.
     node_idxs   = node_idxs - 1
@@ -812,7 +1070,7 @@ def load_sample_indices_and_attribs(dir_NM):
 
     return node_idxs, node_attbs, i_first_order
 
-def read_eigenvector(i_mode, path_eigvec_base):
+def read_eigenvector(i_mode, path_eigvec_base, real_or_complex):
     '''
     Reads a single eigenfunction from a .dat file output by NormalModes.
     
@@ -824,10 +1082,28 @@ def read_eigenvector(i_mode, path_eigvec_base):
 
     See 'Definitions of variables'.
     '''
+
     
-    # Read an eigenvector (a flattened list of vector displacements).
-    path_eigvec = '{:}_{:d}.dat'.format(path_eigvec_base, i_mode)
-    eigvec_flat= np.fromfile(path_eigvec, dtype = 'float64')
+    if real_or_complex == 'complex':
+
+        path_eigvec_base = path_eigvec_base[0:-5]
+
+    if real_or_complex == 'real':
+    
+        # Read an eigenvector (a flattened list of vector displacements).
+        path_eigvec = '{:}_{:d}.dat'.format(path_eigvec_base, i_mode)
+        eigvec_flat = np.fromfile(path_eigvec, dtype = 'float64')
+
+    else:
+
+        # Read both parts of eigenvector (a flattened list of vector displacements).
+        path_eigvec_real = '{:}_{:}_{:d}.dat'.format(path_eigvec_base, 'real', i_mode)
+        path_eigvec_imag = '{:}_{:}_{:d}.dat'.format(path_eigvec_base, 'imag', i_mode)
+
+        eigvec_flat_real = np.fromfile(path_eigvec_real, dtype = 'float64')
+        eigvec_flat_imag = np.fromfile(path_eigvec_imag, dtype = 'float64')
+        
+        eigvec_flat = eigvec_flat_real + 1.0j*eigvec_flat_imag
     
     # Put the eigenvector in the form (n, 3).
     n_eigvec_flat = len(eigvec_flat)
@@ -840,7 +1116,7 @@ def read_eigenvector(i_mode, path_eigvec_base):
   
     return eigvec
 
-def read_mode(dir_NM, i_mode, path_eigvec_base):
+def read_mode(dir_NM, i_mode, path_eigvec_base, real_or_complex):
     '''
     Read information about one mode.
 
@@ -864,7 +1140,7 @@ def read_mode(dir_NM, i_mode, path_eigvec_base):
     freq                    = freq_list[np.where(i_mode_list == i_mode)[0][0]]
    
     # Read the eigenvector.
-    eigvec = read_eigenvector(i_mode, path_eigvec_base) 
+    eigvec = read_eigenvector(i_mode, path_eigvec_base, real_or_complex) 
 
     return freq, eigvec
 
@@ -909,7 +1185,7 @@ def read_index_lists(dir_NM):
         index_lists.append(index_lists_raw[i0 : i1])
 
         index_list_length_cumulative = index_list_length_cumulative + index_list_length
-    
+
     return index_lists
 
 def read_info_for_projection(dir_PM, dir_NM):
@@ -1100,7 +1376,7 @@ def get_discon_info(r_discons, state_outer):
 
     return r_discon_midpoints, state_list, n_interior_discons
 
-def find_r_max(nodes, node_idxs, eigvec, index_lists, r_min = None):
+def find_r_max(nodes, node_idxs, eigvec, index_lists, real_or_complex, r_min = None, ellipticity_profile = None):
     '''
     For a specified displacement field, find the radius at which the maximum displacement occurs.
 
@@ -1126,9 +1402,17 @@ def find_r_max(nodes, node_idxs, eigvec, index_lists, r_min = None):
         r_condition = (r_samples < r_min)
         j_ignore = np.where(r_condition)[0]
         eigvec[j_ignore, :] = 0.0
-        
+       
     # Calculate amplitude of eigenfunction at each sample. 
-    S = np.linalg.norm(eigvec, axis = 1)
+    if real_or_complex == 'real':
+
+        S = np.linalg.norm(eigvec, axis = 1)
+
+    else:
+
+        eigvec_conj = np.conjugate(eigvec)
+        dot_prod = np.real(np.sum(eigvec*eigvec_conj, axis = 1))
+        S = np.sqrt(dot_prod)
 
     # Find index of sample with greatest amplitude.
     j       = np.argmax(S)
@@ -1136,7 +1420,18 @@ def find_r_max(nodes, node_idxs, eigvec, index_lists, r_min = None):
     i       = node_idxs[j]
     node_i  = nodes[i, :]
     r_max     = np.linalg.norm(node_i)
-    
+
+    # Find the undeformed radius of the sample with greatest amplitude.
+    if ellipticity_profile is None:
+
+        # For a spherically-symmetrical planet, the equipotential surfaces
+        # are spheres.
+        r_ell_max = r_max
+
+    else:
+
+        r_ell_max, ell = XYZ_to_REll(*node_i, *ellipticity_profile.T)  
+
     # Find which region the maximum-amplitude sample belongs to.
     found = False
     for i_region, index_list in enumerate(index_lists):
@@ -1147,9 +1442,13 @@ def find_r_max(nodes, node_idxs, eigvec, index_lists, r_min = None):
             i_region_max = i_region
             break
 
-    return r_max, i_region_max, S_max
+    if not found:
 
-def interpolate_eigvec_onto_sphere(path_interpolator_fmt, r_q, i_region_q, nodes, node_idxs, eigvec, index_lists, n_lat_grid):
+        raise ValueError('Index lists do not contain sample of maximum displacement')
+
+    return r_max, r_ell_max, i_region_max, S_max
+
+def interpolate_eigvec_onto_sphere(path_interpolator_fmt, r_q, i_region_q, nodes, node_idxs, eigvec, index_lists, n_lat_grid, ellipticity_profile = None):
     '''
     Interpolates the 3D displacement field onto a regular grid on a sphere with a specified radius.  
 
@@ -1164,6 +1463,9 @@ def interpolate_eigvec_onto_sphere(path_interpolator_fmt, r_q, i_region_q, nodes
     lon_grid, lat_grid, eigvec_grid
         See 'Definitions of variables.'
     '''
+
+    print('r_q', r_q)
+    print('i_region_q', i_region_q)
 
     # Check if the interpolator has already been created.
     if path_interpolator_fmt is not None:
@@ -1247,8 +1549,6 @@ def interpolate_eigvec_onto_sphere(path_interpolator_fmt, r_q, i_region_q, nodes
             eigvec = eigvec[j, :]
             nodes = nodes[node_idxs[j], :]
 
-
-            
             # Create a linear interpolation function.
             interpolator = LinearNDInterpolator(nodes, eigvec)
 
@@ -1276,8 +1576,46 @@ def interpolate_eigvec_onto_sphere(path_interpolator_fmt, r_q, i_region_q, nodes
         lon_grid, lat_grid = np.meshgrid(lon_span, lat_span)
 
         # Find the Cartesian coordinates of the lon/lat grid.
-        x_grid, y_grid, z_grid = rlonlat_to_xyz(r_q, lon_grid, lat_grid)
-           
+        if ellipticity_profile is None:
+
+            x_grid, y_grid, z_grid = rlonlat_to_xyz(r_q, lon_grid, lat_grid)
+
+        else:
+            
+            ell_q = np.interp(r_q, *ellipticity_profile.T)
+
+            #print(lon_grid.shape)
+            
+            x_grid, y_grid, z_grid = RLonLatEll_to_XYZ(r_q, lon_grid, lat_grid, ell_q)
+
+            #print(x_grid.shape)
+            #theta_span = np.linspace(0.0, np.pi)
+            #cos_theta_span = np.cos(theta_span)
+            #r_p = r_q*(1.0 - ((2.0/3.0)*ell_q*LegendrePoly2(cos_theta_span))) 
+            #x_p = r_p*np.sin(theta_span)
+            #z_p = r_p*np.cos(theta_span)
+            #
+            #ell_s = ellipticity_profile[-1, 1]
+            #print(ellipticity_profile.shape)
+            #print(1.0/ell_s)
+            #r_s = 6371.0*(1.0 - ((2.0/3.0)*ell_s*LegendrePoly2(cos_theta_span))) 
+            #x_s = r_s*np.sin(theta_span)
+            #z_s = r_s*np.cos(theta_span)
+
+            #import matplotlib.pyplot as plt
+            #fig = plt.figure()
+            #ax = plt.gca()
+            #rh_grid = np.sqrt(x_grid**2.0 + y_grid**2.0)
+            #ax.scatter(rh_grid, z_grid)
+            #ax.plot(x_p, z_p)
+            #ax.plot(x_s, z_s)
+            #ax.set_aspect(1.0)
+            #plt.show()
+            ###lat_
+
+        #import sys
+        #sys.exit()
+
         # Find the eigenfunction at the grid points using interpolation.
         eigvec_grid = interpolator((x_grid, y_grid, z_grid))
 
@@ -1449,7 +1787,7 @@ def project_from_spherical_harmonics(sh_calculator, Ulm, Vlm, Wlm):
     return Pr, Ve, Vn, We, Wn
 
 # Vector-spherical-harmonic projection at one radius ('quick mode'). ----------
-def pre_projection(dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, i_mode):
+def pre_projection(dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, i_mode, real_or_complex, ellipticity_profile = None):
     '''
     Load mode information, discard second-order nodes, find maximum displacement and normalise eigenvector.
     '''
@@ -1461,8 +1799,8 @@ def pre_projection(dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs
     dir_processed = os.path.join(dir_NM, 'processed')
 
     # Read the information about the mode.
-    freq, eigvec = read_mode(dir_NM, i_mode, eigvec_path_base)
-
+    freq, eigvec = read_mode(dir_NM, i_mode, eigvec_path_base, real_or_complex)
+    
     # Discard information about second-order nodes from the eigvec list.
     eigvec      = eigvec[i_first_order, :]
 
@@ -1476,21 +1814,21 @@ def pre_projection(dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs
     #index_lists = [np.intersect1d(x, i_allowed) for x in index_lists]
 
     # Find the radial coordinate where the largest displacement occurs.
-    r_max, i_region_max, eigvec_max = find_r_max(nodes, node_idxs, eigvec, index_lists, r_min = 0.1*r_discons[0])
+    r_max, r_ell_max, i_region_max, eigvec_max = find_r_max(nodes, node_idxs, eigvec, index_lists, real_or_complex, r_min = 0.1*r_discons[0], ellipticity_profile = ellipticity_profile)
 
     # Normalise the eigenvector, for better numerical behavior.
     eigvec = eigvec/eigvec_max
+    
+    return n_lat_grid, dir_processed, freq, node_idxs, node_attbs, eigvec, index_lists, r_max, r_ell_max, i_region_max, eigvec_max
 
-    return n_lat_grid, dir_processed, freq, node_idxs, node_attbs, eigvec, index_lists, r_max, i_region_max, eigvec_max
-
-def process_one_depth(path_interpolant_fmt, r_sample, i_region_sample, nodes, node_idxs, eigvec, index_lists, n_lat_grid, l_max):
+def process_one_depth(path_interpolant_fmt, r_sample, i_region_sample, nodes, node_idxs, eigvec, index_lists, n_lat_grid, l_max, ellipticity_profile = None):
     '''
     Interpolate, calculate unit vectors, project along unit vectors, and transform from vector components to vector spherical harmonics.
     '''
 
     # At this radial coordinate, interpolate the displacement field onto the sphere.
     #interpolator_path_fmt = os.path.join(dir_processed, 'interpolator_{:>05d}_{:}.pkl'.format(i_mode, '{:>03d}'))
-    lon_grid, lat_grid, eigvec_grid = interpolate_eigvec_onto_sphere(path_interpolant_fmt, r_sample, i_region_sample, nodes, node_idxs, eigvec, index_lists, n_lat_grid)
+    lon_grid, lat_grid, eigvec_grid = interpolate_eigvec_onto_sphere(path_interpolant_fmt, r_sample, i_region_sample, nodes, node_idxs, eigvec, index_lists, n_lat_grid, ellipticity_profile = ellipticity_profile)
     n_lon_grid = lon_grid.shape[1]
 
     # At the grid points, calculate unit vectors in the radial, east and north directions (in terms of the Cartesian basis).
@@ -1498,6 +1836,16 @@ def process_one_depth(path_interpolant_fmt, r_sample, i_region_sample, nodes, no
 
     # Project the vector field into the radial, east and north directions.
     eigvec_r_grid, eigvec_e_grid, eigvec_n_grid = project_along_unit_vectors(eigvec_grid, r_hat_grid, e_hat_grid, n_hat_grid)
+
+    #print(eigvec_r_grid.shape)
+    #print(eigvec_r_grid)
+
+    #import matplotlib.pyplot as plt
+    #plt.imshow(eigvec_r_grid)
+    #plt.show()
+
+    #import sys
+    #sys.exit()
 
     # Transform vector spatial components to vector spherical harmonics.
     # Note: No longer return sh_calculator due to shtns initialisation bug.
@@ -1540,7 +1888,7 @@ def save_spectral(dir_processed, i_mode, coeffs, header_info):
 
     return
 
-def vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, i_mode, save_spatial = False):
+def vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, real_or_complex, i_mode, ellipticity_profile = None):
     '''
     Calculate vector-spherical-harmonic coefficients of displacement field at the radius of maximum displacement.
 
@@ -1556,32 +1904,39 @@ def vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_id
 
     # Load mode information, discard second-order nodes, find maximum displacement and normalise eigenvector.
     n_lat_grid, dir_processed, freq, node_idxs, node_attbs, eigvec, \
-    index_lists, r_max, i_region_max, eigvec_max = pre_projection(
-            dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, i_mode)
+    index_lists, r_max, r_ell_max, i_region_max, eigvec_max = pre_projection(
+            dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, i_mode, real_or_complex, ellipticity_profile = ellipticity_profile)
+
+    #print(eigvec.shape)
+    #print(eigvec[0, :])
+    #print(np.max(np.abs(eigvec)))
+    #print(np.min(np.abs(eigvec)))
+    #print(eigvec_max)
+    #import matplotlib.pyplot as plt
+    #r = np.linalg.norm(nodes, axis = 1)
+    #r_samples = r[node_idxs]
+    #print(r_samples.shape)
+    #abs_eigvec = np.sum(eigvec*np.conjugate(eigvec), axis = 1)
+    #print(abs_eigvec.shape)
+    #plt.scatter(r_samples, abs_eigvec)
+    #plt.show()
+    #import sys
+    #sys.exit()
 
     # Interpolate, calculate unit vectors, project along unit vectors, and transform from vector components to vector spherical harmonics.
-    Ulm, Vlm, Wlm = process_one_depth(None, r_max, i_region_max, nodes, node_idxs, eigvec, index_lists, n_lat_grid, l_max)
+    if real_or_complex == 'real':
 
-    if save_spatial:
+        Ulm, Vlm, Wlm = process_one_depth(None, r_ell_max, i_region_max, nodes, node_idxs, eigvec, index_lists, n_lat_grid, l_max, ellipticity_profile = ellipiticity_profile)
+        coeffs = np.array([Ulm, Vlm, Wlm])
 
-        raise NotImplementedError
+    else:
 
-        ## Calculate the spatial representation of the radial, consoidal and toroidal components.
-        #Ur_grid, Ve_grid, Vn_grid, We_grid, Wn_grid = \
-        #    project_from_spherical_harmonics(sh_calculator, Ulm, Vlm, Wlm)
-
-        ## Save spatial output.
-        #array_out_spatial = np.array([eigvec_grid[..., 0], eigvec_grid[..., 1], eigvec_grid[..., 2], eigvec_r_grid, eigvec_e_grid, eigvec_n_grid, Ur_grid, Ve_grid, Vn_grid, We_grid, Wn_grid])
-        #dir_spatial = os.path.join(dir_processed, 'spatial')
-        #mkdir_if_not_exist(dir_spatial)
-        #file_out_spatial = 'quick_spatial_{:>05d}.npy'.format(i_mode)
-        #path_out_spatial = os.path.join(dir_spatial, file_out_spatial)
-        #print('Saving spatial data to {:}'.format(path_out_spatial))
-        #np.save(path_out_spatial, array_out_spatial)
+        Ulm_real, Vlm_real, Wlm_real = process_one_depth(None, r_ell_max, i_region_max, nodes, node_idxs, np.real(eigvec), index_lists, n_lat_grid, l_max, ellipticity_profile = ellipticity_profile)
+        Ulm_imag, Vlm_imag, Wlm_imag = process_one_depth(None, r_ell_max, i_region_max, nodes, node_idxs, np.imag(eigvec), index_lists, n_lat_grid, l_max, ellipticity_profile = ellipticity_profile)
+        coeffs = np.array([Ulm_real, Vlm_real, Wlm_real, Ulm_imag, Vlm_imag, Wlm_imag])
 
     # Save spectral output including header.
     # Note: Insert singleton dimension for consistency with 'full' mode.
-    coeffs = np.array([Ulm, Vlm, Wlm])
     coeffs = np.expand_dims(coeffs, 0)
     header_info = { 'eigvec_max'    : eigvec_max,
                     'r_max'         : r_max,
@@ -1590,24 +1945,9 @@ def vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_id
                     'i_sample'      : [i_region_max]}
     save_spectral(dir_processed, i_mode, coeffs, header_info)
 
-    ## Save spectral output.
-    #array_out_spectral = np.array([Ulm, Vlm, Wlm])
-    ##
-    ## Add a header line with the scale information.
-    #array_out_spectral = np.insert(array_out_spectral, 0, [eigvec_max, 0.0, 0.0], axis = 1)
-    ##
-    ## Add header with maximum radius information.
-    #array_out_spectral = np.insert(array_out_spectral, 0, [r_max, i_region_max, 0.0], axis = 1)
-    ##
-    #dir_spectral = os.path.join(dir_processed, 'spectral')
-    #file_out_spectral = 'quick_spectral_{:>05d}.npy'.format(i_mode)
-    #path_out_spectral = os.path.join(dir_spectral, file_out_spectral)
-    #print('Saving spectral data to {:}'.format(path_out_spectral))
-    #np.save(path_out_spectral, array_out_spectral)
-
     return
 
-def vsh_projection_quick_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base, save_spatial = False):
+def vsh_projection_quick_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base, real_or_complex, ellipticity_profile = None):
     '''
     A wrapper for vsh_projection_quick(), which assembles the relevant information.
 
@@ -1631,11 +1971,11 @@ def vsh_projection_quick_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base
             read_info_for_projection(dir_PM, dir_NM)
 
     # Do the projection. 
-    vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, i_mode, save_spatial = save_spatial)
+    vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, real_or_complex, i_mode, ellipticity_profile = ellipticity_profile)
 
     return
 
-def vsh_projection_quick_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, save_spatial = False):
+def vsh_projection_quick_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, real_or_complex, ellipticity_profile = None):
     '''
     A wrapper for vsh_projection_quick(), which assembles the relevant information and loops over all of the modes.
 
@@ -1665,11 +2005,12 @@ def vsh_projection_quick_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, save
         print('\nProcessing mode: {:>5d}'.format(i_mode))
 
         # Do the projection. 
-        vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, i_mode, save_spatial = save_spatial)
+        vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, real_or_complex, i_mode,
+                ellipticity_profile = ellipticity_profile)
 
     return
 
-def vsh_projection_quick_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, save_spatial = False):
+def vsh_projection_quick_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, real_or_complex, ellipticity_profile = None):
     '''
     A wrapper for vsh_projection_quick(), which assembles the relevant information and loops over all of the modes using all available processors.
 
@@ -1700,7 +2041,7 @@ def vsh_projection_quick_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, save_
         
         # Use the pool to analyse the modes specified by num_span.
         # Note that the partial() function is used to meet the requirement of pool.map() of a pickleable function with a single input.
-        pool.map(partial(vsh_projection_quick, dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, save_spatial = False), i_mode_list)
+        pool.map(partial(vsh_projection_quick, dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, real_or_complex, ellipticity_profile = ellipticity_profile), i_mode_list)
 
     return
 
@@ -1986,9 +2327,23 @@ def main():
     # Read the input file.
     dir_PM, dir_NM, option, l_max, i_mode_str, n_radii = read_input_NMPostProcess()
 
+    # Check for ellipticity profile.
+    path_ellipticity = os.path.join(dir_PM, 'input', 'ellipticity_profile.txt')
+    try:
+
+        ellipticity_profile = np.loadtxt(path_ellipticity)
+        ellipticity_profile[:, 0] = ellipticity_profile[:, 0]*1.0E-3 # km to m.
+
+    except FileNotFoundError:
+
+        print('No ellipticity profile found at {:}\nAssuming spherical geometry.'.format(path_ellipticity))
+        ellipticity_profile = None
+
     # Do pre-processing steps.
-    pre_process(dir_PM, dir_NM)
+    pre_process(dir_PM, dir_NM, ellipticity_profile = ellipticity_profile)
     eigvec_path_base = get_eigvec_path_base(dir_NM)
+
+    real_or_complex = 'complex'
 
     # Quick projection (one radius only).
     if option == 'quick':
@@ -1996,18 +2351,18 @@ def main():
         # Loop over all modes.
         if i_mode_str == 'all':
             
-            vsh_projection_quick_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base)
+            vsh_projection_quick_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, real_or_complex, ellipticity_profile = ellipticity_profile)
 
         # Loop over all modes using all available processors.
         elif i_mode_str == 'parallel':
-
-            vsh_projection_quick_parallel(dir_PM, dir_NM, l_max, eigvec_path_base)
+            
+            vsh_projection_quick_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, real_or_complex, ellipticity_profile = ellipticity_profile)
         
         # Calculate a single mode.
         else:
 
             i_mode = int(i_mode_str)
-            vsh_projection_quick_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base)
+            vsh_projection_quick_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base, real_or_complex, ellipticity_profile = ellipticity_profile)
 
     # Full projection (at a range of radii).
     elif option == 'full':

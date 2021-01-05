@@ -59,7 +59,7 @@ solid
 
 A successful *NormalModes* run will produce the files listed below, in a single directory. Items 1–4 are necessary for post-processing. These files are detected by *NMPostProcess* by matching regular expressions, so, to avoid errors, you should not add other files to this directory.
 
-1. The mode files (e.g. `mod.1_JOB1_pod1_np48_0.1000000_1.000000_1.dat`). There is one file per mode, and they are listed in order of increasing frequency, as indicated by the final integer in the file name. Each file contains displacement  vector field for one mode: the three components of the mode's displacement at each solution point (including second-order points).
+1. The mode files. In the non-rotating case, the modes are real and there is one file per mode (e.g. `mod.1_JOB1_pod1_np48_0.1000000_1.000000_1.dat`). In the rotating case, the modes are complex and there are two files per mode containing the real and imaginary parts (e.g. `model.1_JOB5_pod1_np48_0.1000000_1.000000_imag_1.dat` and `model.1_JOB5_pod1_np48_0.1000000_1.000000_real_1.dat`). In either case, the modes are listed in order of increasing frequency, as indicated by the final integer in the file name. Each file contains displacement vector field for one mode: the three components of the mode's displacement at each solution point (including second-order points).
 2. The vertex index file (e.g. `mod.1_pod1_np48_vlist.dat`). The vertex indices are integers (one per solution point) which map between the solution points and the mesh node points. This is necessary because some node points have displacement specified twice, on either side of a boundary. For more information, see the docstring for `process.read_eigenvector()`.
 3. The vertex attribute file (e.g. `mod.1_pod1_np48_stat.dat`). The vertex attributes are integers (one per mesh node) indicating whether the grid point is solid, fluid, or solid-fluid, and whether it is a first- or second-order point*. For more information, see the docstring for `process.py`.
 4. The `sbatch` standard output log (e.g. `LLSVP_6222017.txt`). This contains detailed progress information as well as printing out the relative errors and the mode frequencies. Alternatively, some versions of *NormalModes* produce a file `*eigs.txt` which is an increasing list of the squares of the angular frequencies in radians per second. Only one of these two files can be present (because `process.py` searches for a file ending in `.txt`).
@@ -136,7 +136,7 @@ The projection will create a number of output files in the *NormalModes* output 
 * `indices_interior_*.txt` Similar to the discontinuity files, listing the indices of sample points belonging to each interior region, starting with the innermost region.
 * `nodes.txt` The coordinates of the nodes of the mesh (including second-order nodes).
 
-The projected output is a series of *SHTns* complex vector spherical harmonics, which are written to *NumPy* binary files `quick_spectral_*.npy` in the `processed/spectral/` subdirectory. The mode number is indicated in the file name. There are three kinds of coefficients (radial <img src="https://render.githubusercontent.com/render/math?math=U_{lm}">, consoidal <img src="https://render.githubusercontent.com/render/math?math=V_{lm}"> and toroidal <img src="https://render.githubusercontent.com/render/math?math=W_{lm}">) and one header line, so each file stores array of shape <img src="https://render.githubusercontent.com/render/math?math=(3, N %2B 1)"> where <img src="https://render.githubusercontent.com/render/math?math=N"> is the number of coefficients. The number of coefficients is <img src="https://render.githubusercontent.com/render/math?math=(\ell_{max} %2B 1)(\ell_{max} %2B 2)/2">. The coefficients are stored in the order used by *SHTns*.
+The projected output is a series of *SHTns* complex vector spherical harmonics, which are written to *NumPy* binary files `quick_spectral_*.npy` in the `processed/spectral/` subdirectory. The mode number is indicated in the file name. There are three kinds of coefficients (radial <img src="https://render.githubusercontent.com/render/math?math=U_{lm}">, consoidal <img src="https://render.githubusercontent.com/render/math?math=V_{lm}"> and toroidal <img src="https://render.githubusercontent.com/render/math?math=W_{lm}">) and one header line, so each file stores array of shape <img src="https://render.githubusercontent.com/render/math?math=(3, N %2B 1)"> where <img src="https://render.githubusercontent.com/render/math?math=N"> is the number of coefficients. The number of coefficients is <img src="https://render.githubusercontent.com/render/math?math=(\ell_{max} %2B 1)(\ell_{max} %2B 2)/2">. The coefficients are stored in the order used by *SHTns*. In the rotating case, the real and imaginary parts of the vector field are projected separately, so the output arrays have shape  <img src="https://render.githubusercontent.com/render/math?math=(6, N %2B 1)">, with the real coefficients stored first.
 
 ### How to plot the projection output
 
@@ -152,7 +152,7 @@ which is controlled by the input file `input_plotting.txt`. The first line of th
 
  A spatial plot displays a map representation of the three components (radial, consoidal and spheroidal) of the vector field in three panels. Here we have an example of a low-frequency mode of a spherically-symmetric Earth model, neglecting gravity:
  
-![](example_plots/displacement.png "Example of a spatial plot.")
+<img src="example_plots/displacement.png" width = 50%>
 
 We can see this mode is a spheroidal mode (no toroidal component). Note that the consoidal and toroidal components (lower two panels) are surface vector fields with both a direction (indicated by arrows) and a magnitude. Their magnitude is shown using only the positive part of the colour bar. The radial component (top panel) has a fixed direction can be positive (outwards) or negative (inward).
 
@@ -163,9 +163,13 @@ quick		# Option: 'quick' for quick-mode plots.
 spatial 90 	# 'spatial n_lat' or 'spectral'.
 15			# i_mode: The mode ID (integer or 'all').
 png			# Figure output format ('png' or 'pdf').
+real		# Which component to plot ('real', 'complex', 'complex_real_only',
+			# 'complex_imag_only')
 ```
 
 where the first line is the type of processing (`quick` or `full`), the second line is the plot type (`spatial` or `spectral`) and the number of latitude grid points (only used for `spatial`; see discussion in 'Using the code: Quick projection' for finding the appropriate number of points), the third line is the mode number (can also be `all`), and fourth line is the output figure format (currently supports `png` and `pdf`). The spatial field is calculated by re-projecting the VSH coefficients.
+
+In the rotating case, the displacement field is complex. By setting the last line to `complex`, both real and imaginary parts will be plotted. You must also specify the rotation period in hours (e.g. `complex 23.9345`; see <https://en.wikipedia.org/wiki/Sidereal_time> to see why Earth's rotation period is not 24 hours). If you only wish to plot either the real or imaginary parts of the complex field, instead use `complex_real_only` or `complex_imag_only`. 
 
 The figure title gives the radial coordinate of the projection (the radius at which the maximum displacement occurs). An optional file `shell_names.txt` can be placed in the `processed/` directory to give more descriptive names to the regions between solid-fluid discontinuities. For example, for Earth (with no crust), an appropriate shell-name file is
 
@@ -184,13 +188,25 @@ quick		# Option: 'quick' for quick-mode plots.
 spectral 	# 'spatial n_lat' or 'spectral'.
 15			# i_mode: The mode ID (integer or 'all').
 png			# Figure output format ('png' or 'pdf').
+real		# Which component to plot ('real', 'complex', 'complex_real_only',
+			# 'complex_imag_only')
 ```
 
 we get a spectral plot:
 
-![](example_plots/spectrum.png "Example of a spectral plot.")
+<img src="example_plots/spectrum.png" width = 50%>
 
-This shows the VSH coefficients (radial <img src="https://render.githubusercontent.com/render/math?math=U_{lm}">, consoidal <img src="https://render.githubusercontent.com/render/math?math=V_{lm}"> and toroidal <img src="https://render.githubusercontent.com/render/math?math=W_{lm}">). They have been converted from complex to real format (so they range from <img src="https://render.githubusercontent.com/render/math?math=m = -\ell_{max}"> to <img src="https://render.githubusercontent.com/render/math?math=\ell_{max}">). We can see that this mode is dominantly spheroidal with <img src="https://render.githubusercontent.com/render/math?math=\ell = 3">. We also know the frequency of the mode (0.415 mHz) from the `eigenvalue_list.txt` file. Comparison with calculations of a spherically-symmetric Earth then allows us to identify this mode as one of the seven nearly-degenerate modes of Earth's <img src="https://render.githubusercontent.com/render/math?math=_{0}\text{S}_{3}"> multiplet.
+This shows the VSH coefficients (radial <img src="https://render.githubusercontent.com/render/math?math=U_{lm}">, consoidal <img src="https://render.githubusercontent.com/render/math?math=V_{lm}"> and toroidal <img src="https://render.githubusercontent.com/render/math?math=W_{lm}">). They have been converted from complex to real format (so they range from <img src="https://render.githubusercontent.com/render/math?math=m = -\ell_{max}"> to <img src="https://render.githubusercontent.com/render/math?math=\ell_{max}">). (Note that the last line of the plot input file refers to the real/complex nature of the eigenvectors, not the coefficients.) We can see that this mode is dominantly spheroidal with <img src="https://render.githubusercontent.com/render/math?math=\ell = 3">. We also know the frequency of the mode (0.415 mHz) from the `eigenvalue_list.txt` file. Comparison with calculations of a spherically-symmetric Earth then allows us to identify this mode as one of the seven nearly-degenerate modes of Earth's <img src="https://render.githubusercontent.com/render/math?math=_{0}\text{S}_{3}"> multiplet.
+
+#### Animations
+
+```
+quick			# Option: 'quick' for quick-mode plots.
+animation 90 	# The number is n_lat, same as for 'spatial' plots.
+15				# The mode ID (integer; 'all' not allowed for animation).
+none			# Figure output format line (ignored for animation).
+real			# What type of mode is being plotted ('real' or 'complex').
+```
 
 <a href="#top">Back to top</a>
 
@@ -234,7 +250,7 @@ python3 plot/plot_mode_diagram.py
 
 which produces a plot such as
 
-![](example_plots/mode_diagram.png "Example of a mode diagram.")
+<img src="example_plots/mode_diagram.png" width = 60%>
 
 This plot shows all of the spheroidal, toroidal and radial modes, as indicated in the legend. Note that 'T0' indicates 'toroidal modes from shell 0' where shell 0 is the outermost shell, in this case the mantle. At higher frequencies, we would also expect T2 modes (inner-core toroidal modes).
 
@@ -273,7 +289,21 @@ spatial 90 	# 'spatial n_lat' or 'spectral'.
 png			# Figure output format ('png' or 'pdf').
 ```
 
-would produce a full-projection spatial plot for mode 15 at all of the radial slices defined during the processing step. Note that the mode ID can also be 'all', but this will take a long time. As before, changing 'spatial' to 'spectral' will yield a spectral plot for each specified depth slice.
+would produce a full-projection spatial plot for mode 15 at all of the radial slices defined during the processing step. Note that the mode ID can also be 'all', but this will take a long time. As before, changing 'spatial' to 'spectral' will yield a spectral plot for each specified depth slice. The animation below shows the displacement pattern for low-frequency mode of a large planet:
+
+<img src="example_plots/displacement_full.gif" width = 50%>
+
+The indiviudal PNG files were stitched into a GIF using the following *ImageMagick* command:
+`convert -dispose previous -delay 20 -loop 0 displacement_full_00015_0* displacement_full_00015.gif`
+where `-dipose previous` is necessary with the transparent background.
+
+To plot the variation in the *U*, *V* and *W* components as a function of radius, run the command
+
+`python3 plot/plot_eigenfunction.py`
+
+As before, the mode is specific in the `input_plotting.txt` file (the other lines are ignored). This will create a plot such as this:
+
+<img src="example_plots/eigenfunction.png" width = 50%>
 
 <a href="#top">Back to top</a>
 
