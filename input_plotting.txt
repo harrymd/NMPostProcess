@@ -1,6 +1,6 @@
 quick
 spatial 90
-10
+all
 png
 complex 23.93450
 

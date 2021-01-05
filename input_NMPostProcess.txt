@@ -2,7 +2,7 @@
 /Users/hrmd_work/Documents/research/stoneley/output/NormalModes/v5/prem_0219.7_300_1_00.10_01.00_6/without_anomaly/
 quick
 10
-all
+parallel
 
 /Users/hrmd_work/Documents/research/stoneley/output/Magrathea/v4/prem_0473.4_300/
 /Users/hrmd_work/Documents/research/stoneley/output/NormalModes/v4/prem_0473.4_300_1_00.10_01.00_6/without_anomaly/

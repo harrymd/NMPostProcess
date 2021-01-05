@@ -1888,7 +1888,7 @@ def save_spectral(dir_processed, i_mode, coeffs, header_info):
 
     return
 
-def vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, i_mode, real_or_complex, ellipticity_profile = None):
+def vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, real_or_complex, i_mode, ellipticity_profile = None):
     '''
     Calculate vector-spherical-harmonic coefficients of displacement field at the radius of maximum displacement.
 
@@ -1971,7 +1971,7 @@ def vsh_projection_quick_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base
             read_info_for_projection(dir_PM, dir_NM)
 
     # Do the projection. 
-    vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, i_mode, real_or_complex, ellipticity_profile = ellipticity_profile)
+    vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, real_or_complex, i_mode, ellipticity_profile = ellipticity_profile)
 
     return
 
@@ -2005,11 +2005,12 @@ def vsh_projection_quick_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, real
         print('\nProcessing mode: {:>5d}'.format(i_mode))
 
         # Do the projection. 
-        vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, i_mode, real_or_complex)
+        vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, real_or_complex, i_mode,
+                ellipticity_profile = ellipticity_profile)
 
     return
 
-def vsh_projection_quick_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, save_spatial = False):
+def vsh_projection_quick_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, real_or_complex, ellipticity_profile = None):
     '''
     A wrapper for vsh_projection_quick(), which assembles the relevant information and loops over all of the modes using all available processors.
 
@@ -2040,7 +2041,7 @@ def vsh_projection_quick_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, save_
         
         # Use the pool to analyse the modes specified by num_span.
         # Note that the partial() function is used to meet the requirement of pool.map() of a pickleable function with a single input.
-        pool.map(partial(vsh_projection_quick, dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, save_spatial = False), i_mode_list)
+        pool.map(partial(vsh_projection_quick, dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, real_or_complex, ellipticity_profile = ellipticity_profile), i_mode_list)
 
     return
 
@@ -2355,9 +2356,7 @@ def main():
         # Loop over all modes using all available processors.
         elif i_mode_str == 'parallel':
             
-            if real_or_complex == 'complex':
-                raise NotImplementedError
-            vsh_projection_quick_parallel(dir_PM, dir_NM, l_max, eigvec_path_base)
+            vsh_projection_quick_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, real_or_complex, ellipticity_profile = ellipticity_profile)
         
         # Calculate a single mode.
         else:
