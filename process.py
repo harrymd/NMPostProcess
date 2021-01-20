@@ -163,6 +163,7 @@ import ssrfpy
 
 # Import local modules.
 from common import get_list_of_modes_from_output_files, mkdir_if_not_exist, read_discon_file, read_eigenvalues, read_input_NMPostProcess, RLonLatEll_to_XYZ, XYZ_to_REll, LegendrePoly2
+
 # Pre-processing steps (only performed once for a given run). -----------------
 def write_eigenvalues_from_std_out_file(path_std_out, path_eigval_list = None): 
     '''
@@ -284,9 +285,7 @@ def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer,
     # Find nodes on the free surface.
     i_shell = 0
     is_outer = True 
-    surface_condition, j_surface, surface_conv_hull = get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer, ellipticity_profile = ellipticity_profile, boundary_tol = 3.0, surface_method = 'radius')
-
-    print(j_surface.shape)
+    surface_condition, j_surface, surface_conv_hull = get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer, ellipticity_profile = ellipticity_profile, boundary_tol = 1.0E-3, surface_method = 'radius')
 
     # Find all "interior" nodes which do not belong to any interface (must remove the surface nodes).
     # Note: Assume higher-order nodes (3, 4) have already been removed.
@@ -896,6 +895,14 @@ def pre_process(dir_PM, dir_NM, ellipticity_profile = None):
     return
 
 # Reading NormalModes files. --------------------------------------------------
+def read_global_conf(path_global_conf):
+
+    with open(path_global_conf, 'r') as in_id:
+
+        job = int(in_id.readline().split()[-1])
+
+    return job
+
 def read_mesh(dir_PM):
     '''
     Reads the various TetGen files related to the mesh.
@@ -1926,7 +1933,7 @@ def vsh_projection_quick(dir_PM, dir_NM, l_max, eigvec_path_base, nodes, node_id
     # Interpolate, calculate unit vectors, project along unit vectors, and transform from vector components to vector spherical harmonics.
     if real_or_complex == 'real':
 
-        Ulm, Vlm, Wlm = process_one_depth(None, r_ell_max, i_region_max, nodes, node_idxs, eigvec, index_lists, n_lat_grid, l_max, ellipticity_profile = ellipiticity_profile)
+        Ulm, Vlm, Wlm = process_one_depth(None, r_ell_max, i_region_max, nodes, node_idxs, eigvec, index_lists, n_lat_grid, l_max, ellipticity_profile = ellipticity_profile)
         coeffs = np.array([Ulm, Vlm, Wlm])
 
     else:
@@ -2327,6 +2334,14 @@ def main():
     # Read the input file.
     dir_PM, dir_NM, option, l_max, i_mode_str, n_radii = read_input_NMPostProcess()
 
+    # Read the global configuration file.
+    path_global_conf = os.path.join(dir_NM, 'global_conf')
+    job = read_global_conf(path_global_conf)
+
+    # Determine whether the modes are real or complex.
+    job_to_real_or_complex_dict = {2 : 'real', 6 : 'complex'}
+    real_or_complex = job_to_real_or_complex_dict[job]
+
     # Check for ellipticity profile.
     path_ellipticity = os.path.join(dir_PM, 'input', 'ellipticity_profile.txt')
     try:
@@ -2334,7 +2349,7 @@ def main():
         ellipticity_profile = np.loadtxt(path_ellipticity)
         ellipticity_profile[:, 0] = ellipticity_profile[:, 0]*1.0E-3 # km to m.
 
-    except FileNotFoundError:
+    except OSError:
 
         print('No ellipticity profile found at {:}\nAssuming spherical geometry.'.format(path_ellipticity))
         ellipticity_profile = None
@@ -2342,8 +2357,6 @@ def main():
     # Do pre-processing steps.
     pre_process(dir_PM, dir_NM, ellipticity_profile = ellipticity_profile)
     eigvec_path_base = get_eigvec_path_base(dir_NM)
-
-    real_or_complex = 'complex'
 
     # Quick projection (one radius only).
     if option == 'quick':
