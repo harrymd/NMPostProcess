@@ -187,7 +187,7 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
 
                     i = np.where(n_ref == n_i)
 
-                    ax.plot(l_ref[i], f_ref[i], c = 'k')
+                    ax.plot(l_ref[i], f_ref[i], c = c_dict[mode_type])
                     ax.scatter(l_ref[i], f_ref[i], c = 'k')
 
     # Add the legend.
