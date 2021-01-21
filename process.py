@@ -285,7 +285,7 @@ def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer,
     # Find nodes on the free surface.
     i_shell = 0
     is_outer = True 
-    surface_condition, j_surface, surface_conv_hull = get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer, ellipticity_profile = ellipticity_profile, boundary_tol = 1.0E-3, surface_method = 'radius')
+    surface_condition, j_surface, surface_conv_hull = get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer, ellipticity_profile = ellipticity_profile, boundary_tol = 1.5, surface_method = 'radius')
 
     # Find all "interior" nodes which do not belong to any interface (must remove the surface nodes).
     # Note: Assume higher-order nodes (3, 4) have already been removed.
@@ -402,6 +402,10 @@ def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer,
 
             # The next interior region.
             index_lists.append(index_lists_interior[i])
+
+    for index_list in index_lists:
+
+        print(len(index_list))
 
     return index_lists_interior, index_lists_boundaries, index_lists
 
