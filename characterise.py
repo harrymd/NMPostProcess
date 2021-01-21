@@ -296,7 +296,6 @@ def characterise_all_modes_quick(dir_NM):
 
             modes_are_complex = False
             Ulm, Vlm, Wlm = coeffs
-            raise NotImplementedError
 
         elif coeffs.shape[0] == 6:
 

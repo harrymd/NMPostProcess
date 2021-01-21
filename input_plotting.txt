@@ -1,7 +1,12 @@
 quick
 spatial 90
+7
+png
+real
+
+# The lines below are ignored.
+quick
+spatial 90
 1
 png
 complex 23.93450
-
-# The lines below are ignored.

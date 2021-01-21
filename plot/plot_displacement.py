@@ -238,7 +238,16 @@ def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, mode_real_or_complex, show 
         if mode_real_or_complex == 'real':
 
             U_r, V_e, V_n, W_e, W_n = project_from_spherical_harmonics(sh_calculator, Ulm, Vlm, Wlm)
-            plot_sh_disp_3_comp(lon_grid, lat_grid, U_r, V_e, V_n, W_e, W_n, ax_arr = None, show = False, title = title, n_c_levels = n_c_levels_default)
+            fig, ax_arr, handles, contour_info = plot_sh_disp_3_comp(lon_grid, lat_grid, U_r, V_e, V_n, W_e, W_n, fig = fig, ax_arr = None, show = False, title = title, n_c_levels = n_c_levels_default)
+
+            fields = {  'U' : {'r' : U_r},
+                        'V' : {'e' : V_e, 'n' : V_n},
+                        'W' : {'e' : W_e, 'n' : W_n}}
+
+            print(np.max(np.abs(U_r)))
+            print(Ulm)
+            import sys
+            sys.exit()
 
         else:
 

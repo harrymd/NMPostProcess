@@ -304,20 +304,26 @@ def plot_mode_diagram_wrapper(dir_NM, option, paths_ref = None):
             mode_info[type_str]['f'] = np.append(mode_info[type_str]['f'], f[i])
     
     # Load reference dispersion diagram (if available).
-    nlf_ref = dict()
-    for mode_type in paths_ref:
-        
-        if paths_ref[mode_type] is not None:
+    if paths_ref is not None:
 
-            nlf_ref[mode_type] = dict()
-            nlf_ref_i = np.loadtxt(paths_ref[mode_type])
-            nlf_ref[mode_type]['n'] = nlf_ref_i[:, 0].astype(np.int)
-            nlf_ref[mode_type]['l'] = nlf_ref_i[:, 1].astype(np.int)
-            nlf_ref[mode_type]['f'] = nlf_ref_i[:, 2]
+        nlf_ref = dict()
+        for mode_type in paths_ref:
+            
+            if paths_ref[mode_type] is not None:
 
-        else:
+                nlf_ref[mode_type] = dict()
+                nlf_ref_i = np.loadtxt(paths_ref[mode_type])
+                nlf_ref[mode_type]['n'] = nlf_ref_i[:, 0].astype(np.int)
+                nlf_ref[mode_type]['l'] = nlf_ref_i[:, 1].astype(np.int)
+                nlf_ref[mode_type]['f'] = nlf_ref_i[:, 2]
 
-            nlf_ref[mode_type] = None
+            else:
+
+                nlf_ref[mode_type] = None
+
+    else:
+
+        nlf_ref = None
 
     # Plot.
     plot_mode_diagram_core(mode_info, path_fig = path_fig, nlf_ref = nlf_ref)
