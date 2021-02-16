@@ -1165,7 +1165,7 @@ def pre_process(dir_PM, dir_NM, ellipticity_profile = None):
         i_outer_node = set()
         for i in range(n_faces):
             
-            if (face_tets[i, 0] == -1) | (face_tets[i, 1] == -1):
+            if (face_tets[i, 0] == -2) | (face_tets[i, 1] == -2):
                 
                 for j in range(3):
 
@@ -1751,6 +1751,10 @@ def find_r_max(nodes, node_idxs, eigvec, index_lists, real_or_complex, r_min = N
     i       = node_idxs[j]
     node_i  = nodes[i, :]
     r_max     = np.linalg.norm(node_i)
+
+    print(j)
+    import sys
+    sys.exit()
 
     # Find the undeformed radius of the sample with greatest amplitude.
     if ellipticity_profile is None:

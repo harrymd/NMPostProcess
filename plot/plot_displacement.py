@@ -249,6 +249,8 @@ def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, mode_real_or_complex, show 
             U_real_r, V_real_e, V_real_n, W_real_e, W_real_n = project_from_spherical_harmonics(sh_calculator, Ulm_real, Vlm_real, Wlm_real)
             U_imag_r, V_imag_e, V_imag_n, W_imag_e, W_imag_n = project_from_spherical_harmonics(sh_calculator, Ulm_imag, Vlm_imag, Wlm_imag)
 
+            print(U_real_r)
+
             fields = {
                 'U' :   {   'real' : {  'r' : U_real_r},
                             'imag' : {  'r' : U_imag_r}},
