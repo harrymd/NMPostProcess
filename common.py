@@ -554,6 +554,57 @@ def lf_clusters(l, f, f_tol = 0.001):
 
     return i_clusters, l_clusters, f_clusters, n_clusters, f_cluster_means, cluster_multiplicities
 
+def mode_id_information_to_dict(type_list, l_list, f_list, shell_list):
+
+    type_str_list = ['R', 'S', 'T']
+    n_modes = len(type_list)
+    mode_info = dict()
+    for i in range(n_modes):
+
+        # Get string ('R', 'S', or 'T') of mode type.
+        type_str = type_str_list[type_list[i]]
+
+        if type_str == 'T':
+
+            # Toroidal modes have an integer indicating the shell they belong to.
+            type_str = 'T{:>1d}'.format(shell_list[i])
+
+        # Create a new entry in the mode dictionary if no modes of this type have been recorded.
+        if type_str not in mode_info.keys():
+
+            # Store the information for this mode.
+            mode_info[type_str] = dict()
+            mode_info[type_str]['l'] = np.atleast_1d(l_list[i])
+            mode_info[type_str]['f'] = np.atleast_1d(f_list[i])
+
+        # Otherwise, add the mode information to the existing array for this mode type.
+        else:
+
+            # Store the information for this mode.
+            mode_info[type_str]['l'] = np.append(mode_info[type_str]['l'], l_list[i])
+            mode_info[type_str]['f'] = np.append(mode_info[type_str]['f'], f_list[i])
+
+    return mode_info
+
+def reference_mode_info_to_dict(paths_ref):
+
+    nlf_ref = dict()
+    for mode_type in paths_ref:
+        
+        if paths_ref[mode_type] is not None:
+
+            nlf_ref[mode_type] = dict()
+            nlf_ref_i = np.loadtxt(paths_ref[mode_type])
+            nlf_ref[mode_type]['n'] = nlf_ref_i[:, 0].astype(np.int)
+            nlf_ref[mode_type]['l'] = nlf_ref_i[:, 1].astype(np.int)
+            nlf_ref[mode_type]['f'] = nlf_ref_i[:, 2]
+
+        else:
+
+            nlf_ref[mode_type] = None
+
+    return nlf_ref
+
 # Functions related to ellipsoidal geometry.
 def LegendrePoly2(x):
 

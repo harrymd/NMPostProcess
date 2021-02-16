@@ -23,7 +23,7 @@ import  shtns
 
 # Local modules.
 from common         import convert_complex_sh_to_real, get_list_of_modes_from_coeff_files, load_vsh_coefficients, make_l_and_m_lists, mkdir_if_not_exist, read_eigenvalues, read_input_NMPostProcess, read_input_plotting
-from plot.plot_common import save_figure
+from NMPostProcess.plot.plot_common import save_figure
 from process        import project_from_spherical_harmonics 
 
 def region_int_to_title(region, radius, shell_name_path = None):
@@ -243,11 +243,6 @@ def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, mode_real_or_complex, show 
             fields = {  'U' : {'r' : U_r},
                         'V' : {'e' : V_e, 'n' : V_n},
                         'W' : {'e' : W_e, 'n' : W_n}}
-
-            print(np.max(np.abs(U_r)))
-            print(Ulm)
-            import sys
-            sys.exit()
 
         else:
 

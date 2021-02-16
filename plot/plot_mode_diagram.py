@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Load local modules.
-from common import mkdir_if_not_exist, lf_clusters, read_eigenvalues, read_input_NMPostProcess
+from common import mkdir_if_not_exist, lf_clusters, read_eigenvalues, read_input_NMPostProcess, reference_mode_info_to_dict, mode_id_information_to_dict 
 
 # Utilities. ------------------------------------------------------------------
 def label_multiplets(ax, cluster_multiplicities, l_clusters, f_cluster_means, missing_modes = None):
@@ -165,12 +165,9 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
             label_multiplets(ax, cluster_multiplicities, l_clusters, f_cluster_means, missing_modes = None)
 
     # Plot reference dispersion.
-    print(nlf_ref)
     if nlf_ref is not None:
 
         for mode_type in nlf_ref:
-
-            print(mode_type)
 
             if nlf_ref[mode_type] is not None:
 
@@ -180,8 +177,6 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
                 f_ref = mode_info_ref['f']
 
                 n_list = np.sort(np.unique(n_ref))
-
-                print(n_ref, l_ref, f_ref)
 
                 for n_i in n_list:
 
@@ -275,51 +270,54 @@ def plot_mode_diagram_wrapper(dir_NM, option, paths_ref = None):
     _, f = read_eigenvalues(file_eigval_list)
 
     # Group the modes.
-    type_str_list = ['R', 'S', 'T']
-    n_modes = len(i_mode)
-    mode_info = dict()
-    for i in range(n_modes):
+    mode_info = mode_id_information_to_dict(type_, l, f, shell)
+    #type_str_list = ['R', 'S', 'T']
+    #n_modes = len(i_mode)
+    #mode_info = dict()
+    #for i in range(n_modes):
 
-        # Get string ('R', 'S', or 'T') of mode type.
-        type_str = type_str_list[type_[i]]
+    #    # Get string ('R', 'S', or 'T') of mode type.
+    #    type_str = type_str_list[type_[i]]
 
-        if type_str == 'T':
+    #    if type_str == 'T':
 
-            # Toroidal modes have an integer indicating the shell they belong to.
-            type_str = 'T{:>1d}'.format(shell[i])
+    #        # Toroidal modes have an integer indicating the shell they belong to.
+    #        type_str = 'T{:>1d}'.format(shell[i])
 
-        # Create a new entry in the mode dictionary if no modes of this type have been recorded.
-        if type_str not in mode_info.keys():
+    #    # Create a new entry in the mode dictionary if no modes of this type have been recorded.
+    #    if type_str not in mode_info.keys():
 
-            # Store the information for this mode.
-            mode_info[type_str] = dict()
-            mode_info[type_str]['l'] = np.atleast_1d(l[i])
-            mode_info[type_str]['f'] = np.atleast_1d(f[i])
+    #        # Store the information for this mode.
+    #        mode_info[type_str] = dict()
+    #        mode_info[type_str]['l'] = np.atleast_1d(l[i])
+    #        mode_info[type_str]['f'] = np.atleast_1d(f[i])
 
-        # Otherwise, add the mode information to the existing array for this mode type.
-        else:
+    #    # Otherwise, add the mode information to the existing array for this mode type.
+    #    else:
 
-            # Store the information for this mode.
-            mode_info[type_str]['l'] = np.append(mode_info[type_str]['l'], l[i])
-            mode_info[type_str]['f'] = np.append(mode_info[type_str]['f'], f[i])
+    #        # Store the information for this mode.
+    #        mode_info[type_str]['l'] = np.append(mode_info[type_str]['l'], l[i])
+    #        mode_info[type_str]['f'] = np.append(mode_info[type_str]['f'], f[i])
     
     # Load reference dispersion diagram (if available).
     if paths_ref is not None:
 
-        nlf_ref = dict()
-        for mode_type in paths_ref:
-            
-            if paths_ref[mode_type] is not None:
+        nlf_ref = reference_mode_info_to_dict(paths_ref)
 
-                nlf_ref[mode_type] = dict()
-                nlf_ref_i = np.loadtxt(paths_ref[mode_type])
-                nlf_ref[mode_type]['n'] = nlf_ref_i[:, 0].astype(np.int)
-                nlf_ref[mode_type]['l'] = nlf_ref_i[:, 1].astype(np.int)
-                nlf_ref[mode_type]['f'] = nlf_ref_i[:, 2]
+    #    nlf_ref = dict()
+    #    for mode_type in paths_ref:
+    #        
+    #        if paths_ref[mode_type] is not None:
 
-            else:
+    #            nlf_ref[mode_type] = dict()
+    #            nlf_ref_i = np.loadtxt(paths_ref[mode_type])
+    #            nlf_ref[mode_type]['n'] = nlf_ref_i[:, 0].astype(np.int)
+    #            nlf_ref[mode_type]['l'] = nlf_ref_i[:, 1].astype(np.int)
+    #            nlf_ref[mode_type]['f'] = nlf_ref_i[:, 2]
 
-                nlf_ref[mode_type] = None
+    #        else:
+
+    #            nlf_ref[mode_type] = None
 
     else:
 
