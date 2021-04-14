@@ -43,7 +43,7 @@ def label_multiplets(ax, cluster_multiplicities, l_clusters, f_cluster_means, mi
     # Label the multiplets.
     for i in range(n_clusters):
         
-        if mode is 'excess':
+        if mode == 'excess':
              
             excess = cluster_multiplicities[i] - ((2*l_clusters[i]) + 1)
             if excess == 0:
@@ -91,7 +91,7 @@ def label_multiplets(ax, cluster_multiplicities, l_clusters, f_cluster_means, mi
             
     if missing_modes is not None:
         
-        if mode is 'excess':
+        if mode == 'excess':
             
             font_color = 'r'
             font_size = 8
@@ -113,7 +113,7 @@ def label_multiplets(ax, cluster_multiplicities, l_clusters, f_cluster_means, mi
             raise NotImplementedError
 
 # Plotting. -------------------------------------------------------------------
-def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = True, path_fig = None, nlf_ref = None):
+def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = True, path_fig = None, nlf_ref = None, cluster_tol = None, interactive = False):
     '''
     Plots angular order versus frequency.
 
@@ -135,8 +135,11 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
         fig = plt.figure(figsize = (8.0, 6.0), tight_layout = True)
         ax = plt.gca()
 
+    picker = 3 
+
     # Loop over the different kinds of mode.
     c_dict = {'R' : 'red', 'S' : 'blue', 'T0' : 'orange', 'T2' : 'green'}
+    scatter_handle_dict = dict()
     for type_ in mode_info:
 
         if type_ in c_dict.keys():
@@ -148,14 +151,25 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
             c = None
 
         # Plot a point (l, f) for each mode of this type.
-        ax.scatter(mode_info[type_]['l'], mode_info[type_]['f'], label = type_,
-                    c = c)
+        scatter_handle = ax.scatter(mode_info[type_]['l'], mode_info[type_]['f'], label = type_,
+                    c = c, picker = picker)
+
+        scatter_handle_dict[type_] = scatter_handle
 
     # Label mode clusters.
     if label_clusters:
 
         f_max = np.max([np.max(mode_info[type_]['f']) for type_ in mode_info])
-        f_tol = 0.02*f_max
+
+        if cluster_tol is None:
+
+            f_tol = 0.02*f_max
+
+        else:
+
+            f_tol = cluster_tol
+            
+        print('Cluster tolerance: {:.3f} mHz'.format(f_tol))
 
         for type_ in mode_info:
 
@@ -235,6 +249,56 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
         print('Saving figure to {:}'.format(path_fig))
         plt.savefig(path_fig, dpi = 300)
 
+    if interactive:
+
+        print("Interactive mode.")
+
+        #ax.text(0.9, 0.9, "Mode selected:",
+        #        transform = ax.transAxes,
+        #        ha = 'right',
+        #        va = 'top')
+        
+        ev_mode_type = "NA"
+        ev_mode_l    = 0
+        ev_mode_f    = 0.0
+        ev_mode_i    = 0
+
+        ev_mode_fmt = "Type: {:>2}\n$\ell$: {:>2d}\n$f$: {:>7.4f} mHz\nIndex: {:>4d}"
+        ev_mode_label_str = ev_mode_fmt.format(ev_mode_type, ev_mode_l, ev_mode_f, ev_mode_i)
+        ev_mode_label = ax.text(0.5, 0.85, ev_mode_label_str,
+                            transform = ax.transAxes,
+                            ha = 'left',
+                            va = 'top')
+
+        ev_mode_marker = ax.scatter([], [], marker = '+', zorder = 20, c = 'g', s = 20)
+
+        def on_pick(event):
+
+            ind = event.ind[0]
+            artist = event.artist
+
+            ev_mode_type = list(scatter_handle_dict.keys())[list(scatter_handle_dict.values()).index(artist)]
+
+            ev_mode_l = mode_info[ev_mode_type]['l'][ind]
+            ev_mode_f = mode_info[ev_mode_type]['f'][ind]
+            ev_mode_i = mode_info[ev_mode_type]['i'][ind]
+            #data_subset = scatter_handles.index(artist)
+            #data_value = data_subset[ind]
+            #print(data_value)
+            #print("Artist picked: {:}".format(artist))
+            
+            ev_mode_label_str = ev_mode_fmt.format(ev_mode_type, ev_mode_l, ev_mode_f, ev_mode_i)
+            ev_mode_label.set_text(ev_mode_label_str)
+            #print(ev_mode_type)
+
+            ev_mode_marker.set_offsets([ev_mode_l, ev_mode_f])
+
+            plt.draw()
+
+            return
+
+        fig.canvas.callbacks.connect('pick_event', on_pick)
+
     # Show the plot (if requested).
     if show:
 
@@ -242,7 +306,7 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
 
     return
 
-def plot_mode_diagram_wrapper(dir_NM, option, paths_ref = None):
+def plot_mode_diagram_wrapper(dir_NM, option, paths_ref = None, cluster_tol = None, interactive = False):
     '''
     Reads mode information files and plots angular order versus frequency.
 
@@ -324,7 +388,11 @@ def plot_mode_diagram_wrapper(dir_NM, option, paths_ref = None):
         nlf_ref = None
 
     # Plot.
-    plot_mode_diagram_core(mode_info, path_fig = path_fig, nlf_ref = nlf_ref)
+    plot_mode_diagram_core(mode_info,
+            path_fig = path_fig,
+            nlf_ref = nlf_ref,
+            cluster_tol = cluster_tol,
+            interactive = interactive)
 
     return
 
@@ -334,7 +402,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--ref_path', action = 'append', nargs = 2,
     metavar=('mode_type', 'path'), help = "Path to a file containing mode information (n, l, and frequency (mHz)) for the specified mode type (e.g. S) for a reference model, to add to the plot."),
+    parser.add_argument('--cluster_tol', type = float)
+    parser.add_argument('--interactive', action = 'store_true', help = "Include this flag to allow interaction with plot.")
     input_args = parser.parse_args()
+    cluster_tol = input_args.cluster_tol
+    interactive = input_args.interactive
 
     # Parse reference paths.
     if input_args.ref_path is None:
@@ -354,7 +426,10 @@ def main():
     dir_PM, dir_NM, option, l_max, i_mode_str, n_radii = read_input_NMPostProcess()
 
     # Plot the mode diagram.
-    plot_mode_diagram_wrapper(dir_NM, option, paths_ref = paths_ref)
+    plot_mode_diagram_wrapper(dir_NM, option,
+            paths_ref = paths_ref,
+            cluster_tol = cluster_tol,
+            interactive = interactive)
 
 if __name__ == '__main__':
 
