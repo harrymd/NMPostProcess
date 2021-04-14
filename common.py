@@ -665,14 +665,10 @@ def XYZ_to_REll(x, y, z, r_ellipticity_profile, ellipticity_profile):
 
     r_oblate = np.sqrt((x**2.0) + (y**2.0) + (z**2.0))
 
-    print(x, y, z)
-    print(r_oblate)
     #r_h_oblate = np.sqrt((x**2.0) + (y**2.0))
     #theta = np.arctan2(z, r_h_oblate) # Note: Sign of theta not important.
     cos_theta = z/r_oblate # Note sign of theta is not important.
     P2CosTheta = LegendrePoly2(cos_theta)
-
-    print(np.rad2deg(np.arccos(cos_theta)))
 
     # First guess of ellipticity, based on oblate radius.
     # (Points outside the sphere will have the ellipticity of the outer surface.)
@@ -731,7 +727,5 @@ def XYZ_to_REll(x, y, z, r_ellipticity_profile, ellipticity_profile):
         #print(y[j_not_converged])
         #print(z[j_not_converged])
         raise ValueError('Iterative solution for r did not converge.')
-
-    print(r_spherical_estimate_new)
 
     return r_spherical_estimate_new, ellipticity_estimate_new

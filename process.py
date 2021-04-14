@@ -287,10 +287,6 @@ def get_indices_of_regions(nodes, node_attbs, node_idxs, r_discons, state_outer,
     is_outer = True 
     surface_condition, j_surface = get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer, i_outer_node = i_outer_node)
     
-    print(2233 in i_outer_node)
-
-    print('\n')
-    
     #surface_condition, j_surface, surface_conv_hull = get_samples_on_boundary(i_shell, is_outer, nodes, node_attbs, node_idxs, r_discons, state_outer, ellipticity_profile = ellipticity_profile, boundary_tol = 1.5, surface_method = 'radius')
 
     # Find all "interior" nodes which do not belong to any interface (must remove the surface nodes).
@@ -1159,9 +1155,6 @@ def find_r_max(nodes, node_idxs, eigvec, index_lists, real_or_complex, r_min = N
     node_i  = nodes[i, :]
     r_max     = np.linalg.norm(node_i)
     
-    print('r_max')
-    print(j, i)
-
     # Find the undeformed radius of the sample with greatest amplitude.
     if ellipticity_profile is None:
 
@@ -1204,9 +1197,6 @@ def interpolate_eigvec_onto_sphere(path_interpolator_fmt, r_q, i_region_q, nodes
     lon_grid, lat_grid, eigvec_grid
         See 'Definitions of variables.'
     '''
-
-    print('r_q', r_q)
-    print('i_region_q', i_region_q)
 
     # Check if the interpolator has already been created.
     if path_interpolator_fmt is not None:
@@ -1885,13 +1875,16 @@ def remove_interpolant_files(path_interpolator_fmt, i_sample):
     i_region_unique = list(set(i_sample))
     i_interior_region = [i for i in i_region_unique if ((i % 3) == 1)]
     for i in i_interior_region: 
-
-         path_interpolator = path_interpolator_fmt.format(i)
-         os.remove(path_interpolator)
+        
+        path_interpolator = path_interpolator_fmt.format(i)
+        try:
+            os.remove(path_interpolator)
+        except FileNotFoundError:
+            pass
 
     return
 
-def vsh_projection_full(dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, r_sample, i_sample, i_mode):
+def vsh_projection_full(dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, r_sample, i_sample, real_or_complex, ellipticity_profile, i_mode):
     '''
     Perform VSH projection at specified radial coordinates.
     '''
@@ -1902,25 +1895,43 @@ def vsh_projection_full(dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_
 
     # Load mode information, discard second-order nodes, find maximum displacement and normalise eigenvector.
     n_lat_grid, dir_processed, freq, node_idxs, node_attbs, eigvec, \
-    index_lists, r_max, i_region_max, eigvec_max = pre_projection(
-            dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, i_mode)
+    index_lists, r_max, r_ell_max, i_region_max, eigvec_max = pre_projection(
+            dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, i_mode, real_or_complex, ellipticity_profile = ellipticity_profile)
 
     # Loop over the different sampling radii.
     n_coeffs = (l_max + 1)*(l_max + 2)//2
     n_radii = len(r_sample)
-    coeffs = np.zeros((n_radii, 3, n_coeffs), dtype = np.complex)
+    if real_or_complex == 'real':
+
+        num_coeffs_per_slice = 3
+
+    else:
+
+        num_coeffs_per_slice = 6
+
+    coeffs = np.zeros((n_radii, 6, n_coeffs), dtype = np.complex)
     #
     for i in range(n_radii):
 
         print('Processing at radius sample {:>4d} of {:>4d}, radius {:>9.1f} km, region {:>4d}'.format(i + 1, n_radii, r_sample[i], i_sample[i]))
 
-        # Interpolate, calculate unit vectors, project along unit vectors, and transform from vector components to vector spherical harmonics.
-        Ulm, Vlm, Wlm = process_one_depth(path_interpolator_fmt, r_sample[i], i_sample[i], nodes, node_idxs, eigvec, index_lists, n_lat_grid, l_max)
+        if real_or_complex == 'real':
 
-        # Store in the output array.
-        coeffs[i, 0, :] = Ulm
-        coeffs[i, 1, :] = Vlm
-        coeffs[i, 2, :] = Wlm
+            # Interpolate, calculate unit vectors, project along unit vectors, and transform from vector components to vector spherical harmonics.
+            Ulm, Vlm, Wlm = process_one_depth(path_interpolator_fmt, r_sample[i], i_sample[i], nodes, node_idxs, eigvec, index_lists, n_lat_grid, l_max, ellipticity_profile = None)
+            # Store in the output array.
+            coeffs[i, 0, :] = Ulm
+            coeffs[i, 1, :] = Vlm
+            coeffs[i, 2, :] = Wlm
+
+        else:
+            
+            Ulm_real, Vlm_real, Wlm_real = process_one_depth(None, r_sample[i], i_sample[i], nodes, node_idxs, np.real(eigvec), index_lists, n_lat_grid, l_max, ellipticity_profile = ellipticity_profile)
+            Ulm_imag, Vlm_imag, Wlm_imag = process_one_depth(None, r_sample[i], i_sample[i], nodes, node_idxs, np.imag(eigvec), index_lists, n_lat_grid, l_max, ellipticity_profile = ellipticity_profile)
+
+            # Store in output array.
+            coeffs[i, :, :] = np.array([Ulm_real, Vlm_real, Wlm_real, Ulm_imag, Vlm_imag, Wlm_imag])
+
 
     # Save the output.
     header_info = { 'eigvec_max'    : eigvec_max,
@@ -1936,7 +1947,7 @@ def vsh_projection_full(dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_
 
     return coeffs, eigvec_max, r_max, i_region_max
 
-def vsh_projection_full_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base, n_radii):
+def vsh_projection_full_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base, n_radii, real_or_complex, ellipticity_profile = None):
     '''
     A wrapper for vsh_projection_full(), which assembles the relevant information.
 
@@ -1964,11 +1975,11 @@ def vsh_projection_full_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base,
     # Perform the VSH projection at each radius.
     coeffs, eigvec_max, r_max, i_region_max = \
         vsh_projection_full(dir_NM, l_max, eigvec_path_base, nodes, node_idxs,
-            node_attbs, index_lists, i_first_order, r_discons, r_sample, i_sample, i_mode)
+            node_attbs, index_lists, i_first_order, r_discons, r_sample, i_sample, real_or_complex, ellipticity_profile, i_mode)
 
     return
 
-def vsh_projection_full_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, n_radii):
+def vsh_projection_full_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, n_radii, real_or_complex, ellipticity_profile = None):
     '''
     A wrapper for vsh_projection_full(), which assembles the relevant information.
 
@@ -2004,11 +2015,11 @@ def vsh_projection_full_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, n_rad
         #path_interpolator_fmt = os.path.join(dir_processed, 'interpolator_{:>05d}_{:}.pkl'.format(i_mode, '{:>03d}'))
         coeffs, eigvec_max, r_max, i_region_max = \
             vsh_projection_full(dir_NM, l_max, eigvec_path_base, nodes, node_idxs,
-                node_attbs, index_lists, i_first_order, r_discons, i_mode, r_sample, i_sample)
+                node_attbs, index_lists, i_first_order, r_discons, r_sample, i_sample, real_or_complex, ellipticity_profile, i_mode)
 
     return
 
-def vsh_projection_full_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, n_radii):
+def vsh_projection_full_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, n_radii, real_or_complex, ellipticity_profile = None):
     '''
     A wrapper for vsh_projection_full(), which assembles the relevant information.
 
@@ -2042,7 +2053,7 @@ def vsh_projection_full_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, n_radi
         
         # Use the pool to analyse the modes specified by num_span.
         # Note that the partial() function is used to meet the requirement of pool.map() of a pickleable function with a single input.
-        pool.map(partial(vsh_projection_full, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, r_sample, i_sample), i_mode_list)
+        pool.map(partial(vsh_projection_full, dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_attbs, index_lists, i_first_order, r_discons, r_sample, i_sample, real_or_complex, ellipticity_profile), i_mode_list)
 
     return
 
@@ -2101,17 +2112,17 @@ def main():
         # Loop over all modes.
         if i_mode_str == 'all':
 
-            vsh_projection_full_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, n_radii)
+            vsh_projection_full_all_modes(dir_PM, dir_NM, l_max, eigvec_path_base, n_radii, real_or_complex, ellipticity_profile = ellipticity_profile)
 
         # Loop over all modes using all available processors.
         elif i_mode_str == 'parallel':
 
-            vsh_projection_full_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, n_radii)
+            vsh_projection_full_parallel(dir_PM, dir_NM, l_max, eigvec_path_base, n_radii, real_or_complex, ellipticity_profile = ellipticity_profile)
 
         else:
 
             i_mode = int(i_mode_str)
-            vsh_projection_full_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base, n_radii)
+            vsh_projection_full_wrapper(dir_PM, dir_NM, l_max, i_mode, eigvec_path_base, n_radii, real_or_complex, ellipticity_profile = ellipticity_profile)
 
     else:
 
