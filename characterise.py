@@ -174,101 +174,6 @@ def calculate_power_distribution_full(coeffs, l_list, weights, print_ = True):
             
     return EU, EV, EW, E, E_of_l
 
-def characterise_all_modes_quick_v0(dir_NM): 
-
-    option = 'quick'
-    i_radius = None
-
-    # Get a list of modes.
-    #i_mode_list = get_list_of_modes_from_output_files(dir_NM)
-    i_mode_list = get_list_of_modes_from_coeff_files(dir_NM, option) 
-    n_modes = len(i_mode_list)
-
-    # Define directories.
-    dir_processed = os.path.join(dir_NM, 'processed')
-
-    # Loop over all modes.
-    first_iteration = True
-    for i, i_mode in enumerate(i_mode_list):
-
-        # Load the complex VSH coefficients.
-        Ulm, Vlm, Wlm, r_max_i, i_region_max_i, _ = load_vsh_coefficients(dir_NM, i_mode, i_radius = i_radius)
-
-        if first_iteration:
-
-            # Infer the maximum l-value used.
-            n_coeffs = len(Ulm)
-            l_max = (int((np.round(np.sqrt(8*n_coeffs + 1)) - 1))//2) - 1
-
-            # Get the list of l and m values of the coefficients.
-            l, m = make_l_and_m_lists(l_max)
-
-            # Prepare output arrays.
-            E_UVW = np.zeros((3, n_modes))
-            E_of_l = np.zeros((l_max + 1, n_modes))
-            r_max = np.zeros(n_modes)
-            i_region_max = np.zeros(n_modes, dtype = np.int)
-
-            first_iteration = False
-
-        # Calculate the power distribution.
-        EU_i, EV_i, EW_i, E_i, E_of_l_i = calculate_power_distribution_quick(Ulm, Vlm, Wlm, l, print_ = False)
-        
-        # Normalise by the sum.
-        EU_i        = EU_i/E_i
-        EV_i        = EV_i/E_i
-        EW_i        = EW_i/E_i
-        E_of_l_i    = E_of_l_i/E_i
-
-        # Store.
-        E_UVW[0, i]     = EU_i
-        E_UVW[1, i]     = EV_i
-        E_UVW[2, i]     = EW_i
-        E_of_l[:, i]    = E_of_l_i
-        # 
-        r_max[i] = r_max_i
-        i_region_max[i] = i_region_max_i
-
-    # Save mode characterisation information.
-    array_out = np.array([*E_UVW, *E_of_l, r_max, i_region_max])
-    path_out = os.path.join(dir_NM, 'processed', 'characterisation_quick.npy')
-    print('Saving mode characterisation information to {:}'.format(path_out))
-    np.save(path_out, array_out)
-
-    # Find l-value and type for each mode.
-    l = np.zeros(n_modes, dtype = np.int)
-    shell = np.zeros(n_modes, dtype = np.int)
-    # type_: 0: radial, 1: spheroidal, 2: toroidal
-    type_ = np.zeros(n_modes, dtype = np.int)
-    for i in range(n_modes):
-
-        shell[i] = i_region_max[i]//3
-         
-        # Find dominant l-value.
-        l[i] = np.argmax(E_of_l[:, i])
-
-        if l[i] == 0:
-
-            type_[i] = 0
-
-        else:
-
-            # Check if spheroidal or toroidal power is greater.
-            if ((E_UVW[0, i] + E_UVW[1, i]) > E_UVW[2, i]):
-
-                type_[i] = 1
-
-            else:
-
-                type_[i] = 2
-
-    path_out_ids = os.path.join(dir_NM, 'processed', 'mode_ids_quick.txt')
-    out_array_ids = np.array([i_mode_list, l, type_, shell])
-    print('Saving mode identifications to {:}'.format(path_out_ids))
-    np.savetxt(path_out_ids, out_array_ids.T, fmt = '%i')
-
-    return
-
 def characterise_all_modes_quick(dir_NM): 
 
     option = 'quick'
@@ -305,8 +210,6 @@ def characterise_all_modes_quick(dir_NM):
         else:
 
             raise ValueError
-
-        #Ulm, Vlm, Wlm, r_max_i, i_region_max_i, _ = load_vsh_coefficients(dir_NM, i_mode, i_radius = i_radius)
 
         if first_iteration:
 
@@ -455,8 +358,23 @@ def characterise_all_modes_full(dir_NM):
         print('Characterising mode {:>5d}, item {:>5d} of {:>5d}'.format(i_mode, i + 1, n_modes))
 
         # Load the complex VSH coefficients.
-        coeffs, header_info = load_vsh_coefficients(dir_NM, i_mode, i_radius = 'all')
+        coeffs, header_info, _, _ = load_vsh_coefficients(dir_NM, i_mode, i_radius = 'all')
         
+        if coeffs.shape[1] == 3:
+
+            modes_are_complex = False
+
+        elif coeffs.shape[1] == 6:
+
+            modes_are_complex = True
+            coeffs_new = np.zeros((coeffs.shape[0], 3, coeffs.shape[2]),
+                            dtype = np.complex)
+            coeffs_new[:, 0, :] = coeffs[:, 0, :] + 1.0j*coeffs[:, 3, :]
+            coeffs_new[:, 1, :] = coeffs[:, 1, :] + 1.0j*coeffs[:, 4, :]
+            coeffs_new[:, 2, :] = coeffs[:, 2, :] + 1.0j*coeffs[:, 5, :]
+
+            coeffs = coeffs_new
+
         if first_iteration:
 
             # Infer the maximum l-value used.
@@ -538,22 +456,7 @@ def characterise_all_modes_full(dir_NM):
 # Main. -----------------------------------------------------------------------
 def main():
     
-    ## Read the input file.
-    #input_file = 'input_NMPostProcess.txt'
-    #with open(input_file, 'r') as in_id:
-
-    #    input_args = in_id.readlines()
-    #
-    ## Parse input arguments.
-    ## Remove trailing newline characters.
-    #input_args = [x.strip() for x in input_args]
-    ##
-    #dir_PM      = input_args[0]
-    #dir_NM      = input_args[1]
-    #option      = input_args[2]
-    #l_max       = int(input_args[3])
-    #i_mode_str  = input_args[4]
-
+    # Read input file.
     dir_PM, dir_NM, option, l_max, i_mode_str, n_radii  = read_input_NMPostProcess()
 
     if option == 'quick':

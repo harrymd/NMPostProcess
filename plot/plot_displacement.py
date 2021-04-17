@@ -6,6 +6,7 @@ Plots spatial and spectral representation of vector-spherical-harmonic fields.
 # Import modules. -------------------------------------------------------------
 
 # Core modules.
+import argparse
 from glob import glob
 import os
 
@@ -76,7 +77,7 @@ def region_int_to_title(region, radius, shell_name_path = None):
     return title
 
 # Plot displacement patterns. -------------------------------------------------
-def plot_sh_disp_all_modes(dir_NM, n_lat_grid, mode_real_or_complex, fmt = 'pdf', i_radius_str = None):
+def plot_sh_disp_all_modes(dir_NM, n_lat_grid, mode_real_or_complex, fmt = 'pdf', i_radius_str = None, path_outline = None):
     '''
     For each mode, plots a vector field on the surface of a sphere in terms of the radial, consoidal and toroidal components.
     This is a wrapper for plot_sh_disp_wrapper().
@@ -107,11 +108,11 @@ def plot_sh_disp_all_modes(dir_NM, n_lat_grid, mode_real_or_complex, fmt = 'pdf'
 
         print('\nPlotting displacement for mode {:>5d}.'.format(i_mode))
 
-        plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, mode_real_or_complex, show = False, fmt = fmt, i_radius_str = i_radius_str)
+        plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, mode_real_or_complex, show = False, fmt = fmt, i_radius_str = i_radius_str, path_outline = path_outline)
 
     return
 
-def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, mode_real_or_complex, show = True, fmt = 'pdf', transparent = False, i_radius_str = None, close = True, c_bar_label = 'Default', figsize = None):
+def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, mode_real_or_complex, show = True, fmt = 'pdf', transparent = False, i_radius_str = None, close = True, c_bar_label = 'Default', figsize = None, path_outline = None):
     '''
     Plots a vector field on the surface of a sphere in terms of the radial, consoidal and toroidal components.
     This is a wrapper for plot_sh_disp() which first loads the necessary arrays. 
@@ -135,6 +136,11 @@ def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, mode_real_or_complex, show 
     dir_plot = os.path.join(dir_processed, 'plots')
     mkdir_if_not_exist(dir_plot)
 
+    # Load outline data if specified.
+    if path_outline is not None:
+
+        outline_data = np.loadtxt(path_outline)
+
     # Determine if the plot is 'quick' mode or 'full' mode.
     if i_radius_str is None:
 
@@ -150,14 +156,14 @@ def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, mode_real_or_complex, show 
 
             figsize = (3.5, 6.0)
 
-        fig = plt.figure(figsize = figsize)
         two_panel = False
-    
+
     elif mode_real_or_complex == 'complex':
 
-        #fig = plt.figure(figsize = (14.0, 6.0))
-        
-        fig = plt.figure(figsize = (7.0, 6.0))
+        if figsize is None:
+
+            figsize = (7.0, 6.0)
+
         two_panel = True
 
     else:
@@ -171,7 +177,7 @@ def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, mode_real_or_complex, show 
 
     if i_radius_str == 'all':
 
-        _, _, _, _, _, header_info = load_vsh_coefficients(dir_NM, i_mode, 0)
+        _, header_info, _, _ = load_vsh_coefficients(dir_NM, i_mode, 0)
         n_samples = len(header_info['r_sample'])
 
         i_radius_list = list(range(n_samples))
@@ -191,6 +197,8 @@ def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, mode_real_or_complex, show 
 
     first_iteration = True
     for j_radius in i_radius_list:
+        
+        fig = plt.figure(figsize = figsize)
 
         # Load the VSH coefficients for the specified mode.
         coeffs, header_info, r_sample, i_sample = load_vsh_coefficients(dir_NM, i_mode, j_radius)
@@ -279,20 +287,24 @@ def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, mode_real_or_complex, show 
 
             if mode_real_or_complex == 'complex':
 
-                fig, ax_arr_real, handles_real, contour_info = plot_sh_disp_3_comp(lon_grid, lat_grid, U_real_r, V_real_e, V_real_n, W_real_e, W_real_n, fig = fig, axes_grid_int = 121, ax_arr = None, show = False, title = title, n_c_levels = n_c_levels_default, c_bar_label = c_bar_label_real)
-                fig, ax_arr_imag, handles_imag, contour_info = plot_sh_disp_3_comp(lon_grid, lat_grid, U_imag_r, V_imag_e, V_imag_n, W_imag_e, W_imag_n, fig = fig, axes_grid_int = 122, ax_arr = None, show = False, title = None, n_c_levels = n_c_levels_default, c_bar_label = c_bar_label_imag)
-            #plot_sh_disp_3_comp(lon_grid, lat_grid, U_abs_r, V_abs_e, V_abs_n, W_abs_e, W_abs_n, fig = fig, axes_grid_int = 143, fig, ax_arr = None, show = False, title = None, n_c_levels = n_c_levels_default)
+                #plt.imshow(W_real_e)
+                #plt.show()
+
+                fig, ax_arr_real, handles_real, contour_info_real = plot_sh_disp_3_comp(lon_grid, lat_grid, U_real_r, V_real_e, V_real_n, W_real_e, W_real_n, fig = fig, axes_grid_int = 121, ax_arr = None, show = False, title = title, n_c_levels = n_c_levels_default, c_bar_label = c_bar_label_real, outline_data = outline_data)
+                fig, ax_arr_imag, handles_imag, contour_info_imag = plot_sh_disp_3_comp(lon_grid, lat_grid, U_imag_r, V_imag_e, V_imag_n, W_imag_e, W_imag_n, fig = fig, axes_grid_int = 122, ax_arr = None, show = False, title = None, n_c_levels = n_c_levels_default, c_bar_label = c_bar_label_imag, outline_data = outline_data)
+
+                contour_info = [contour_info_real, contour_info_imag]
 
                 ax_arr = [ax_arr_real, ax_arr_imag]
                 handles = [handles_real, handles_imag]
 
             elif mode_real_or_complex == 'complex_real_only':
 
-                fig, ax_arr, handles, contour_info = plot_sh_disp_3_comp(lon_grid, lat_grid, U_real_r, V_real_e, V_real_n, W_real_e, W_real_n, fig = fig, ax_arr = None, show = False, title = title, n_c_levels = n_c_levels_default, c_bar_label = c_bar_label_real) 
+                fig, ax_arr, handles, contour_info = plot_sh_disp_3_comp(lon_grid, lat_grid, U_real_r, V_real_e, V_real_n, W_real_e, W_real_n, fig = fig, ax_arr = None, show = False, title = title, n_c_levels = n_c_levels_default, c_bar_label = c_bar_label_real, outline_data = outline_data) 
 
             elif mode_real_or_complex == 'complex_imag_only':
 
-                fig, ax_arr, handles, contour_info = plot_sh_disp_3_comp(lon_grid, lat_grid, U_real_r, V_real_e, V_real_n, W_real_e, W_real_n, fig = fig, ax_arr = None, show = False, title = title, n_c_levels = n_c_levels_default, c_bar_label = c_bar_label_imag)
+                fig, ax_arr, handles, contour_info = plot_sh_disp_3_comp(lon_grid, lat_grid, U_real_r, V_real_e, V_real_n, W_real_e, W_real_n, fig = fig, ax_arr = None, show = False, title = title, n_c_levels = n_c_levels_default, c_bar_label = c_bar_label_imag, outline_data = outline_data)
 
             else:
                 
@@ -316,7 +328,8 @@ def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, mode_real_or_complex, show 
             else:
 
                 name_fig = 'displacement_{:}_{:}_{:>05d}_{:>03d}.{:}'.format(option, real_or_complex_str, i_mode, j_radius, fmt)
-
+            
+            #plt.draw()
             path_fig = os.path.join(dir_plot, name_fig)
             print('Saving figure to {:}'.format(path_fig))
             save_figure(path_fig, fmt, transparent = transparent)
@@ -328,7 +341,7 @@ def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, mode_real_or_complex, show 
 
         # Close the plot.
         if close:
-
+            
             plt.close()
 
     return fig, ax_arr, handles, fields, contour_info
@@ -459,7 +472,7 @@ def plot_sh_disp(lon_grid, lat_grid, v_r = None, v_n = None, v_e = None, ax = No
     
     return conts, arrows, contour_info
 
-def plot_sh_disp_3_comp(lon_grid, lat_grid, U_r, V_e, V_n, W_e, W_n, ax_arr = None, fig = None, axes_grid_int = 111, show = True, title = None, n_c_levels = 21, c_bar_label = 'Displacement'): 
+def plot_sh_disp_3_comp(lon_grid, lat_grid, U_r, V_e, V_n, W_e, W_n, ax_arr = None, fig = None, axes_grid_int = 111, show = True, title = None, n_c_levels = 21, c_bar_label = 'Displacement', outline_data = None): 
     '''
     Plots a vector field on the surface of a sphere in terms of the radial, consoidal and toroidal components.
 
@@ -502,6 +515,10 @@ def plot_sh_disp_3_comp(lon_grid, lat_grid, U_r, V_e, V_n, W_e, W_n, ax_arr = No
     h_U_contour, _, contour_info = plot_sh_disp(lon_grid, lat_grid, v_r = U_r,             ax = ax_U, n_c_levels = n_c_levels)
     h_V_contour, h_V_arrows, _ = plot_sh_disp(lon_grid, lat_grid, v_e = V_e, v_n = V_n,  ax = ax_V, n_c_levels = n_c_levels)
     h_W_contour, h_W_arrows, _ = plot_sh_disp(lon_grid, lat_grid, v_e = W_e, v_n = W_n,  ax = ax_W, n_c_levels = n_c_levels, ax_cbar = ax_W.cax, c_bar_label = c_bar_label)
+
+    for ax in ax_arr:
+
+        ax.plot(*outline_data.T, transform = ccrs.PlateCarree(), color = 'g')
 
     handles = [h_U_contour, h_V_contour, h_V_arrows, h_W_contour, h_W_arrows]
 
@@ -1226,6 +1243,11 @@ def plot_sh_real_coeffs_3_comp(l, m, ulm, vlm, wlm, title_str = None, fig = None
 # Main and sentinel. ----------------------------------------------------------
 def main():
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--path_outline', help = 'Specify path to an outline file to be plotted on maps.')
+    args = parser.parse_args()
+    path_outline = args.path_outline
+
     # Read the NMPostProcess input file.
     dir_PM, dir_NM, _, l_max, i_mode_str, n_radii = read_input_NMPostProcess()
 
@@ -1250,7 +1272,8 @@ def main():
         # Spatial plot.
         if plot_type == 'spatial':
 
-            plot_sh_disp_all_modes(dir_NM, n_lat_grid, mode_real_or_complex, fmt = fmt, i_radius_str = i_radius_str)
+            plot_sh_disp_all_modes(dir_NM, n_lat_grid, mode_real_or_complex, fmt = fmt, i_radius_str = i_radius_str,
+                    path_outline = path_outline)
 
         # Spectral plot.
         elif plot_type == 'spectral':
@@ -1267,11 +1290,12 @@ def main():
 
     # Plot one mode.
     else:
-
+        
         i_mode = int(i_mode_str)
         if plot_type == 'spatial':
 
-            plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, mode_real_or_complex, fmt = fmt, i_radius_str = i_radius_str, show = show)
+            plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, mode_real_or_complex, fmt = fmt, i_radius_str = i_radius_str, show = show,
+                    path_outline = path_outline)
 
         elif plot_type == 'spectral':
             

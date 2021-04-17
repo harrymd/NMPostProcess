@@ -576,7 +576,7 @@ def mode_id_information_to_dict(type_list, l_list, f_list, shell_list):
             mode_info[type_str] = dict()
             mode_info[type_str]['l'] = np.atleast_1d(l_list[i])
             mode_info[type_str]['f'] = np.atleast_1d(f_list[i])
-            mode_info[type_str]['i'] = np.atleast_1d(i)
+            mode_info[type_str]['i'] = np.atleast_1d(i) + 1
 
         # Otherwise, add the mode information to the existing array for this mode type.
         else:
@@ -584,7 +584,7 @@ def mode_id_information_to_dict(type_list, l_list, f_list, shell_list):
             # Store the information for this mode.
             mode_info[type_str]['l'] = np.append(mode_info[type_str]['l'], l_list[i])
             mode_info[type_str]['f'] = np.append(mode_info[type_str]['f'], f_list[i])
-            mode_info[type_str]['i'] = np.append(mode_info[type_str]['i'], i)
+            mode_info[type_str]['i'] = np.append(mode_info[type_str]['i'], i + 1)
 
     return mode_info
 

@@ -138,8 +138,9 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
     picker = 3 
 
     # Loop over the different kinds of mode.
-    c_dict = {'R' : 'red', 'S' : 'blue', 'T0' : 'orange', 'T2' : 'green'}
+    c_dict = {'R' : 'red', 'S' : 'blue', 'T0' : 'orange', 'T2' : 'green', 'T1' : 'purple'}
     scatter_handle_dict = dict()
+    alpha = 0.5
     for type_ in mode_info:
 
         if type_ in c_dict.keys():
@@ -152,7 +153,7 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
 
         # Plot a point (l, f) for each mode of this type.
         scatter_handle = ax.scatter(mode_info[type_]['l'], mode_info[type_]['f'], label = type_,
-                    c = c, picker = picker)
+                    c = c, picker = picker, alpha = alpha)
 
         scatter_handle_dict[type_] = scatter_handle
 
@@ -197,7 +198,7 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
                     i = np.where(n_ref == n_i)
 
                     ax.plot(l_ref[i], f_ref[i], c = c_dict[mode_type])
-                    ax.scatter(l_ref[i], f_ref[i], c = 'k')
+                    ax.scatter(l_ref[i], f_ref[i], c = 'k', marker = '+', alpha = 0.7, s = 45, zorder = 20)
 
     # Add the legend.
     plt.legend()
@@ -265,12 +266,12 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
 
         ev_mode_fmt = "Type: {:>2}\n$\ell$: {:>2d}\n$f$: {:>7.4f} mHz\nIndex: {:>4d}"
         ev_mode_label_str = ev_mode_fmt.format(ev_mode_type, ev_mode_l, ev_mode_f, ev_mode_i)
-        ev_mode_label = ax.text(0.5, 0.85, ev_mode_label_str,
+        ev_mode_label = ax.text(0.1, 0.85, ev_mode_label_str,
                             transform = ax.transAxes,
                             ha = 'left',
                             va = 'top')
 
-        ev_mode_marker = ax.scatter([], [], marker = '+', zorder = 20, c = 'g', s = 20)
+        ev_mode_marker = ax.scatter([], [], marker = '+', zorder = 20, c = 'g', s = 40)
 
         def on_pick(event):
 
