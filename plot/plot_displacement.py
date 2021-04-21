@@ -141,6 +141,10 @@ def plot_sh_disp_wrapper(dir_NM, i_mode, n_lat_grid, mode_real_or_complex, show 
 
         outline_data = np.loadtxt(path_outline)
 
+    else:
+
+        outline_data = None
+
     # Determine if the plot is 'quick' mode or 'full' mode.
     if i_radius_str is None:
 
@@ -515,10 +519,12 @@ def plot_sh_disp_3_comp(lon_grid, lat_grid, U_r, V_e, V_n, W_e, W_n, ax_arr = No
     h_U_contour, _, contour_info = plot_sh_disp(lon_grid, lat_grid, v_r = U_r,             ax = ax_U, n_c_levels = n_c_levels)
     h_V_contour, h_V_arrows, _ = plot_sh_disp(lon_grid, lat_grid, v_e = V_e, v_n = V_n,  ax = ax_V, n_c_levels = n_c_levels)
     h_W_contour, h_W_arrows, _ = plot_sh_disp(lon_grid, lat_grid, v_e = W_e, v_n = W_n,  ax = ax_W, n_c_levels = n_c_levels, ax_cbar = ax_W.cax, c_bar_label = c_bar_label)
+    
+    if outline_data is not None:
 
-    for ax in ax_arr:
+        for ax in ax_arr:
 
-        ax.plot(*outline_data.T, transform = ccrs.PlateCarree(), color = 'g')
+            ax.plot(*outline_data.T, transform = ccrs.PlateCarree(), color = 'g')
 
     handles = [h_U_contour, h_V_contour, h_V_arrows, h_W_contour, h_W_arrows]
 

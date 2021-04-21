@@ -2,10 +2,12 @@ import argparse
 import os
 
 import matplotlib.pyplot as plt
+from matplotlib import colors as mpl_colors
 import numpy as np
 
 from NMPostProcess.common import convert_complex_sh_to_real, load_vsh_coefficients, read_discon_file, read_eigenvalues, read_input_NMPostProcess, read_input_plotting
 from NMPostProcess.plot.plot_common import save_figure
+from NMPostProcess.project_into_mode_basis import convert_to_real_spherical_harmonics
 
 try:
     from Ouroboros.common import (load_eigenfreq, load_eigenfunc, read_input_file)
@@ -79,7 +81,7 @@ def get_radial_profiles_real(coeffs):
     return U, V, W
 
 def get_radial_profiles_complex(coeffs):
-
+    
     n_radii = coeffs.shape[0]
 
     # Extract the components.
@@ -194,6 +196,9 @@ def plot_eigenfunction_wrapper(dir_PM, dir_NM, i_mode, fmt = 'png', mode_real_or
     # Load the coefficients and radial coordinates.
     coeffs, header, _, _ = load_vsh_coefficients(dir_NM, i_mode, i_radius = 'all')
     r = header['r_sample']
+
+    # Remove scaling factor.
+    coeffs = coeffs * header['eigvec_max']
 
     # Calculate radial profiles from the coefficients.
     if mode_real_or_complex == 'real':
@@ -322,12 +327,81 @@ def plot_eigenfunction_wrapper(dir_PM, dir_NM, i_mode, fmt = 'png', mode_real_or
 
     return
 
+def plot_all_coeff_profiles(dir_PM, dir_NM, i_mode, l, l_max, fmt = 'png', mode_real_or_complex = 'real', multiply_by_k = True, compare_info = None, show = True):
+
+    # Load comparison eigenfunction.
+    if compare_info is not None:
+
+        eigfunc_dict = load_compare_eigfunc(compare_info)
+
+    # Load the mode frequency.
+    dir_processed           = os.path.join(dir_NM, 'processed')
+    file_eigval_list        = os.path.join(dir_processed, 'eigenvalue_list.txt')
+    i_mode_list, freq_list  = read_eigenvalues(file_eigval_list)
+    i_mode_list             = np.array(i_mode_list, dtype = np.int)
+    freq_list               = np.array(freq_list)
+    freq                    = freq_list[np.where(i_mode_list == i_mode)[0][0]]
+
+    # Create the title.
+    title = 'Mode {:>5d}, frequency {:>7.3f} mHz'.format(i_mode, freq)
+
+    # Read the discontinuity radius information.
+    path_discon_info = os.path.join(dir_PM, 'radii.txt')
+    r_discons, state_outer = read_discon_file(path_discon_info)
+    n_discons = len(r_discons)
+
+    # Load the coefficients and radial coordinates.
+    coeffs, header, _, _ = load_vsh_coefficients(dir_NM, i_mode, i_radius = 'all')
+    r = header['r_sample']
+
+    ## Remove scaling factor.
+    #coeffs = coeffs * header['eigvec_max']
+
+    # Convert to real.
+    l_coeffs, m_coeffs, coeffs = convert_to_real_spherical_harmonics(coeffs, l_max)
+
+    i_choose = np.where(l_coeffs == l)[0]
+    m_choose = m_coeffs[i_choose]
+    coeffs = coeffs[:, :, i_choose]
+    num_choose = len(m_choose)
+
+    # 
+    fig, ax_arr = plt.subplots(3, 2, figsize = (14.0, 11.0), sharex = True,
+                        sharey = True, constrained_layout = True)
+
+    map_coeffs_to_ax = {0 : [0, 0], 1 : [0, 1], 2 : [0, 2],
+                        3 : [1, 0], 4 : [1, 1], 5 : [1, 2]}
+
+    # Create colour scale.
+    c_map = plt.get_cmap('rainbow_r')
+    c_norm = mpl_colors.Normalize(vmin = 0.0, vmax = (num_choose - 1.0))
+
+    for i in range(6):
+        
+        ax_i, ax_j = map_coeffs_to_ax[i]
+        ax = ax_arr[ax_j, ax_i]
+
+        for j in range(num_choose):
+
+            color = c_map(c_norm(j))
+
+            ax.plot(coeffs[i, :, j], r, label = '{:>+3d}'.format(m_choose[j]),
+                    color = color, alpha = 0.5)
+
+        #ax.legend()
+
+    plt.show()
+
+    return
+
 def main():
 
     # Read input arguments.
     parser = argparse.ArgumentParser()
     parser.add_argument("--path_compare", nargs = 4, metavar = ('path_input', 'mode_type', 'n', 'l'), help = "Path to Ouroboros input file and mode ID for comparison of eigenfunction.")
+    parser.add_argument("--all_coeffs", type = int)
     args = parser.parse_args()
+    all_coeffs = args.all_coeffs
     if args.path_compare is not None:
         
         compare_info = dict()
@@ -342,7 +416,7 @@ def main():
         compare_info = None
 
     # Read the NMPostProcess input file.
-    dir_PM, dir_NM, _, _, _, _ = read_input_NMPostProcess()
+    dir_PM, dir_NM, _, l_max, _, _ = read_input_NMPostProcess()
 
     # Read the input_plotting file.
     option, i_radius_str, plot_type, i_mode_str, fmt, n_lat_grid, \
@@ -351,16 +425,39 @@ def main():
     if i_mode_str == 'all':
 
         raise NotImplementedError
+        show = False
+
+    elif ',' in i_mode_str:
+
+        i_mode_0_str, i_mode_1_str = i_mode_str.split(',')
+        i_mode_0 = int(i_mode_0_str)
+        i_mode_1 = int(i_mode_1_str)
+        i_mode_list = list(range(i_mode_0, i_mode_1 + 1))
+        show = False
 
     else:
 
         #i_mode = int(i_mode_str)
-        for i_mode in range(85, 116):
+        i_mode_list = [int(i_mode_str)]
+        show = True
+
+    #for i_mode in range(85, 116):
+    for i_mode in i_mode_list:
+        
+        if all_coeffs is not None:
+
+            plot_all_coeff_profiles(dir_PM, dir_NM, i_mode, all_coeffs, l_max,
+                    fmt = fmt,
+                    mode_real_or_complex = mode_real_or_complex,
+                    compare_info = compare_info,
+                    show = show)
+
+        else:
 
             plot_eigenfunction_wrapper(dir_PM, dir_NM, i_mode, fmt = fmt,
                     mode_real_or_complex = mode_real_or_complex,
                     compare_info = compare_info,
-                    show = False)
+                    show = show)
 
     return
 

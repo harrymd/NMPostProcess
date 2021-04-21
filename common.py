@@ -209,7 +209,7 @@ def load_vsh_coefficients(dir_NM, i_mode, i_radius = None):
     header_info['r_sample']     = np.array(header[3              : 3 +   n_radii])
     header_info['i_sample']     = header[3 + n_radii    : 3 + 2*n_radii]
     header_info['i_sample']     = np.array(header_info['i_sample'], dtype = np.int)
-
+    
     if option == 'full':
 
         if i_radius == 'all':

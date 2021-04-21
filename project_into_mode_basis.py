@@ -4,6 +4,7 @@ import os
 import numpy as np
 
 from NMPostProcess.common import (convert_complex_sh_to_real,
+                            mkdir_if_not_exist,
                             load_vsh_coefficients, get_list_of_modes_from_coeff_files,
                             read_eigenvalues, read_input_NMPostProcess)
 from Ouroboros.common import (get_n_solid_layers, load_eigenfreq,
@@ -53,6 +54,9 @@ def load_1d_mode_info(path_1d_input):
 
 def projection_wrapper_one_mode(dir_NM, i_mode, f, mode_info_1d, run_info_1d, l_max, shell_mass, max_f_diff = 0.2):
 
+    # Dictionary for saving mode type as integer.
+    mode_type_to_int_dict = {'R' : 0, 'S' : 1, 'T' : 2, 'T1' : 2, 'I' : 3, 'T0' : 3}
+
     # Find 1-D modes which are close in frequency to the 3-D mode.
     mode_info_1d = find_close_modes(f, mode_info_1d, max_f_diff)
 
@@ -71,42 +75,116 @@ def projection_wrapper_one_mode(dir_NM, i_mode, f, mode_info_1d, run_info_1d, l_
     coeffs[2, :, :] = k * coeffs[2, :, :]
     coeffs[4, :, :] = k * coeffs[4, :, :]
     coeffs[5, :, :] = k * coeffs[5, :, :]
-    
-    mode_type_test = 'T1'
-    mode_info_1d = {mode_type_test : mode_info_1d[mode_type_test]}
 
-    # Loop over all the 1-D modes and evaluate scalar product with the 3-D mode.
-    num_modes_compare = sum([len(mode_info_1d[mode_type]['n']) for mode_type in mode_info_1d.keys()])
+    #mode_type_test = 'T1'
+    #mode_info_1d = {mode_type_test : mode_info_1d[mode_type_test]}
+
+    # Count the modes.
+    num_modes_1d_by_type_no_multiplets = dict()
+    num_modes_1d_by_type_with_multiplets = dict()
+    num_modes_1d_total_no_multiplets = 0
+    num_modes_1d_total_with_multiplets = 0
+    # 
+    for mode_type in mode_info_1d.keys():
+        
+        num_modes_1d_by_type_no_multiplets[mode_type] = len(mode_info_1d[mode_type]['l'])
+        #
+        num_modes_1d_total_no_multiplets = num_modes_1d_total_no_multiplets + \
+                                        num_modes_1d_by_type_no_multiplets[mode_type]
+        
+        num_modes_1d_by_type_with_multiplets[mode_type] = 0
+        for j in range(num_modes_1d_by_type_no_multiplets[mode_type]):
+            
+            l_j = mode_info_1d[mode_type]['l'][j]
+            num_modes_1d_by_type_with_multiplets[mode_type] = \
+                    num_modes_1d_by_type_with_multiplets[mode_type] + ((2 * l_j) + 1)
+
+        num_modes_1d_total_with_multiplets = num_modes_1d_total_with_multiplets + \
+                num_modes_1d_by_type_with_multiplets[mode_type]
+
+    # Prepare to loop over all the 1-D modes and evaluate scalar product with the 3-D mode.
     #
-    n = np.zeros(num_modes_compare)
-    l = np.zeros(num_modes_compare)
-    m = np.zeros(num_mode
+    mode_type_out_array = np.zeros(num_modes_1d_total_with_multiplets, dtype = np.int)
+    n                   = np.zeros(num_modes_1d_total_with_multiplets, dtype = np.int)
+    l                   = np.zeros(num_modes_1d_total_with_multiplets, dtype = np.int)
+    m                   = np.zeros(num_modes_1d_total_with_multiplets, dtype = np.int)
+    product_real_part   = np.zeros(num_modes_1d_total_with_multiplets)
+    product_imag_part   = np.zeros(num_modes_1d_total_with_multiplets)
     #
-    product_real_part = np.zeros(num_modes_compare)
-    product_imag_part = np.zeros(num_modes_compare)
-    i = 0
+    i0 = 0
+
+    # Loop over mode types.
     for mode_type_1d in mode_info_1d.keys():
 
-        num_modes_type = len(mode_info_1d[mode_type_1d]['n'])
-        for j in range(num_modes_type):
+        # Get mode type integer for saving output.
+        mode_type_int = mode_type_to_int_dict[mode_type_1d]
 
-            n
+        # Loop over modes of the given mode type.
+        for j in range(num_modes_1d_by_type_no_multiplets[mode_type_1d]):
 
-            product_real_part[i] = project_one_mode_onto_one_multiplet(
+            print('Mode_type {:>2}, mode {:>4d} of {:>4d}'.format(mode_type_1d,
+                    j + 1, num_modes_1d_by_type_no_multiplets[mode_type_1d]))
+
+            # Get n, l and multiplicity of current 1-D mode.
+            n_j = mode_info_1d[mode_type_1d]['n'][j]
+            l_j = mode_info_1d[mode_type_1d]['l'][j]
+            multiplicity_j = (2 * l_j) + 1
+
+            # Get upper index in output array.
+            i1 = i0 + multiplicity_j       
+
+            # All modes in the multiplet have the same mode type.
+            mode_type_out_array[i0 : i1] = mode_type_int
+
+            # All (2l + 1) modes in the multiplet have the same n and l value.
+            n[i0 : i1] = n_j
+            l[i0 : i1] = l_j
+
+            # Find the indices of the given l value in the coefficient list.
+            k = np.where((l_coeffs == l_j))[0]
+
+            # Get the m values from the coefficient list.
+            m[i0 : i1] = m_coeffs[k]
+
+            # Do projection of real part.
+            product_real_part[i0 : i1] = project_one_mode_onto_one_multiplet(
                                     header['r_sample'], header['i_sample'],
                                     shell_mass,
-                                    coeffs[0, :, :], coeffs[1, :, :],
-                                    coeffs[2, :, :], run_info_1d, mode_type_1d,
+                                    coeffs[0, :, k], coeffs[1, :, k],
+                                    coeffs[2, :, k], run_info_1d, mode_type_1d,
                                     mode_info_1d[mode_type_1d]['n'][j],
                                     mode_info_1d[mode_type_1d]['l'][j],
                                     mode_info_1d[mode_type_1d]['f'][j])
 
-            print(product_real_part[i])
+            # Do projection of imaginary part.
+            product_imag_part[i0 : i1] = project_one_mode_onto_one_multiplet(
+                                    header['r_sample'], header['i_sample'],
+                                    shell_mass,
+                                    coeffs[3, :, k], coeffs[4, :, k],
+                                    coeffs[5, :, k], run_info_1d, mode_type_1d,
+                                    mode_info_1d[mode_type_1d]['n'][j],
+                                    mode_info_1d[mode_type_1d]['l'][j],
+                                    mode_info_1d[mode_type_1d]['f'][j])
 
-            import sys
-            sys.exit()
+            # Prepare for next iteration of loop.
+            i0 = i1
 
-            i = i + 1
+    # Save output.
+    out_fmt = '{:>2d} {:>5d} {:>5d} {:>+6d} {:>+19.12e} {:>+19.12e}\n'
+    dir_processed = os.path.join(dir_NM, 'processed')
+    dir_projections = os.path.join(dir_processed, 'projections')
+    mkdir_if_not_exist(dir_projections)
+    file_out = 'mode_{:>05d}.txt'.format(i_mode)
+    path_out = os.path.join(dir_projections, file_out)
+    print('Writing to {:}'.format(path_out))
+    with open(path_out, 'w') as out_id:
+
+        for k in range(num_modes_1d_total_with_multiplets):
+
+            out_id.write(out_fmt.format(
+                    mode_type_out_array[k],
+                    n[k], l[k], m[k],
+                    product_real_part[k], product_imag_part[k]))
 
     return
 
@@ -280,9 +358,7 @@ def get_shell_mass_wrapper(dir_NM, model_1d):
 
     return shell_mass
 
-def project_one_mode_one_basis(r_sample, i_sample, shell_mass, U_3d, V_3d, W_3d, run_info_1d, type_1d, n_1d, l_1d, f_1d):
-
-    print(U_3d.shape)
+def project_one_mode_onto_one_multiplet(r_sample, i_sample, shell_mass, U_3d, V_3d, W_3d, run_info_1d, type_1d, n_1d, l_1d, f_1d):
 
     # Mineos and Ouroboros use slightly different mode labelling.
     if run_info_1d['code'] == 'ouroboros':
@@ -316,27 +392,62 @@ def project_one_mode_one_basis(r_sample, i_sample, shell_mass, U_3d, V_3d, W_3d,
     eigfunc_interpolated = interpolate_eigfunc(r_sample, i_sample,
                                 eigfunc_dict, type_1d, i_toroidal = i_toroidal)
 
+    ##if (n_1d == 1) & (l_1d == 17):
+    #if (n_1d == 2) & (l_1d == 17):
+
+    #    import matplotlib.pyplot as plt
+    #    fig, ax_arr = plt.subplots(1, 2, figsize = (11.0, 8.5), sharey = True)
+
+    #    ax = ax_arr[0]
+
+    #    ax.plot(eigfunc_interpolated['U'], r_sample, marker = '.', label = 'U (interpolated)')
+    #    ax.plot(eigfunc_interpolated['V'], r_sample, marker = '.', label = 'V (interpolated)')
+
+    #    i_compare = 0
+    #    scale = np.max(np.abs(U_3d[i_compare, :])) / np.max(np.abs(eigfunc_interpolated['U']))
+    #    ax.plot(U_3d[i_compare, :]/scale, r_sample, marker = '.', label = 'U')
+    #    ax.plot(V_3d[i_compare, :]/scale, r_sample, marker = '.', label = 'V')
+
+    #    ax = ax_arr[1]
+
+    #    ax.plot(shell_mass *( U_3d[i_compare, :] * eigfunc_interpolated['U'] + V_3d[i_compare, :] * eigfunc_interpolated['V']),
+    #                r_sample, marker = '.')
+
+    #    ax.legend()
+
+    #    for ax in ax_arr:
+
+    #        ax.axvline()
+    #    
+    #    print(shell_mass)
+    #    print(r_sample)
+    #    plt.show()
+
+    #    import sys
+    #    sys.exit()
+
     # Evaluate the scalar product.
-    n_radii = len(r_sample)
-    product = 0.0
-    for i in range(n_radii):
+    num_in_multiplet, num_radii = U_3d.shape
+    product = np.zeros(num_in_multiplet)
+    for i in range(num_radii):
         
         if type_1d == 'R':
 
-            product_i = (shell_mass[i] * U_3d[i] * eigfunc_interpolated['U'][i])
+            product_i = (shell_mass[i] * U_3d[:, i] * eigfunc_interpolated['U'][i])
 
         elif type_1d == 'S': 
 
-            product_i = shell_mass[i] * (U_3d[i] * eigfunc_interpolated['U'][i] +
-                                         V_3d[i] * eigfunc_interpolated['V'][i])
+            product_i = shell_mass[i] * (U_3d[:, i] * eigfunc_interpolated['U'][i] +
+                                         V_3d[:, i] * eigfunc_interpolated['V'][i])
+            if (n_1d == 1) & (l_1d == 17):
+                
+                print('{:>5d} {:>+.3e}'.format(i, product_i[0]))
 
         elif type_1d[0] == 'T':
 
-            product_i = (shell_mass[i] * W_3d[i] * eigfunc_interpolated['W'][i])
+            product_i = (shell_mass[i] * W_3d[:, i] * eigfunc_interpolated['W'][i])
 
         product = product + product_i
-
-    print(product)
 
     return product
 
@@ -485,13 +596,18 @@ def main():
 
     # Do projection for each mode.
     first_iteration = True
-    #for i_mode in i_mode_list:
-    for i_mode in [1]:
+    for i_mode in i_mode_list:
+    #for i_mode in [1]:
+    #for i_mode in [423]:
+    #for i_mode in [876]:
+
+        print('Mode {:>5d}'.format(i_mode))
 
         # Get the masses of the shells.
         if first_iteration:
 
             shell_mass = get_shell_mass_wrapper(dir_NM, model_1d)
+            shell_mass = shell_mass[::-1]
             first_iteration = False
         
         # Do the projection.
