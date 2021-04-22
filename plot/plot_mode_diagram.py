@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Load local modules.
-from common import mkdir_if_not_exist, lf_clusters, read_eigenvalues, read_input_NMPostProcess, reference_mode_info_to_dict, mode_id_information_to_dict 
+from NMPostProcess.common import mkdir_if_not_exist, lf_clusters, read_eigenvalues, read_input_NMPostProcess, reference_mode_info_to_dict, mode_id_information_to_dict 
 
 # Utilities. ------------------------------------------------------------------
 def label_multiplets(ax, cluster_multiplicities, l_clusters, f_cluster_means, missing_modes = None):
@@ -113,7 +113,7 @@ def label_multiplets(ax, cluster_multiplicities, l_clusters, f_cluster_means, mi
             raise NotImplementedError
 
 # Plotting. -------------------------------------------------------------------
-def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = True, path_fig = None, nlf_ref = None, cluster_tol = None, interactive = False):
+def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = True, path_fig = None, nlf_ref = None, cluster_tol = None, interactive = False, from_projection = False):
     '''
     Plots angular order versus frequency.
 
@@ -140,7 +140,7 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
     # Loop over the different kinds of mode.
     c_dict = {'R' : 'red', 'S' : 'blue', 'T0' : 'orange', 'T2' : 'green', 'T1' : 'purple'}
     scatter_handle_dict = dict()
-    alpha = 0.5
+    alpha = 0.2
     for type_ in mode_info:
 
         if type_ in c_dict.keys():
@@ -160,24 +160,37 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
     # Label mode clusters.
     if label_clusters:
 
-        f_max = np.max([np.max(mode_info[type_]['f']) for type_ in mode_info])
+        if from_projection:
 
-        if cluster_tol is None:
+            for type_ in mode_info:
 
-            f_tol = 0.02*f_max
+                l_clusters, f_cluster_means, f_splitting_clusters, cluster_multiplicities = \
+                        group_proj_info(mode_info[type_])
+                print(l_clusters, f_cluster_means, f_splitting_clusters, cluster_multiplicities)
+                label_multiplets(ax, cluster_multiplicities, l_clusters, f_cluster_means, missing_modes = None)
+
 
         else:
 
-            f_tol = cluster_tol
-            
-        print('Cluster tolerance: {:.3f} mHz'.format(f_tol))
+            f_max = np.max([np.max(mode_info[type_]['f']) for type_ in mode_info])
 
-        for type_ in mode_info:
+            if cluster_tol is None:
 
-            i_clusters, l_clusters, f_clusters, n_clusters, f_cluster_means, \
-            cluster_multiplicities = lf_clusters(mode_info[type_]['l'], mode_info[type_]['f'], f_tol = f_tol)
+                f_tol = 0.02*f_max
 
-            label_multiplets(ax, cluster_multiplicities, l_clusters, f_cluster_means, missing_modes = None)
+            else:
+
+                f_tol = cluster_tol
+                
+            print('Cluster tolerance: {:.3f} mHz'.format(f_tol))
+
+            for type_ in mode_info:
+
+                i_clusters, l_clusters, f_clusters, n_clusters, f_cluster_means, \
+                cluster_multiplicities = lf_clusters(mode_info[type_]['l'], mode_info[type_]['f'], f_tol = f_tol)
+                print(cluster_multiplicities)
+
+                label_multiplets(ax, cluster_multiplicities, l_clusters, f_cluster_means, missing_modes = None)
 
     # Plot reference dispersion.
     if nlf_ref is not None:
@@ -307,7 +320,73 @@ def plot_mode_diagram_core(mode_info, ax = None, show = True, label_clusters = T
 
     return
 
-def plot_mode_diagram_wrapper(dir_NM, option, paths_ref = None, cluster_tol = None, interactive = False):
+def proj_id_information_to_dict(i_mode, n_list, l_list, f_list, type_int):
+    
+    type_int_to_str = ['R', 'S', 'T0', 'T1']
+    num_modes = len(i_mode)
+    mode_info = dict()
+    for i in range(num_modes):
+
+        type_str = type_int_to_str[type_int[i]]
+
+        if type_str not in mode_info.keys():
+
+            # Store the information for this mode.
+            mode_info[type_str] = dict()
+            mode_info[type_str]['n'] = np.atleast_1d(n_list[i])
+            mode_info[type_str]['l'] = np.atleast_1d(l_list[i])
+            mode_info[type_str]['f'] = np.atleast_1d(f_list[i])
+            mode_info[type_str]['i'] = np.atleast_1d(i_mode[i])
+
+        # Otherwise, add the mode information to the existing array for this mode type.
+        else:
+
+            # Store the information for this mode.
+            mode_info[type_str]['n'] = np.append(mode_info[type_str]['n'], n_list[i])
+            mode_info[type_str]['l'] = np.append(mode_info[type_str]['l'], l_list[i])
+            mode_info[type_str]['f'] = np.append(mode_info[type_str]['f'], f_list[i])
+            mode_info[type_str]['i'] = np.append(mode_info[type_str]['i'], i_mode[i])
+
+    return mode_info
+
+def group_proj_info(mode_info):
+
+    # Unpack.
+    n = mode_info['n']
+    l = mode_info['l']
+    f = mode_info['f']
+
+    num_modes = len(n)
+    splitting_dict = dict()
+    for i in range(num_modes):
+
+        nl_key = '{:>05d}_{:>05d}'.format(n[i], l[i])
+        if nl_key in splitting_dict.keys():
+
+            splitting_dict[nl_key]['f_list'].append(f[i])
+
+        else:
+
+            splitting_dict[nl_key] = dict()
+            splitting_dict[nl_key]['n'] = n[i]
+            splitting_dict[nl_key]['l'] = l[i]
+            splitting_dict[nl_key]['f_list'] = [f[i]]
+
+    num_singlets = len(splitting_dict.keys())
+    l_singlets = np.zeros(num_singlets, dtype = np.int)
+    f_mean_singlets = np.zeros(num_singlets)
+    f_splitting_singlets = np.zeros(num_singlets)
+    multiplicity = np.zeros(num_singlets, dtype = np.int)
+    for i, multiplet in enumerate(splitting_dict.keys()):
+
+        l_singlets[i]           = splitting_dict[multiplet]['l']
+        f_mean_singlets[i]      = np.mean(splitting_dict[multiplet]['f_list'])
+        f_splitting_singlets[i] = np.ptp(splitting_dict[multiplet]['f_list'])
+        multiplicity[i] = len(splitting_dict[multiplet]['f_list'])
+
+    return l_singlets, f_mean_singlets, f_splitting_singlets, multiplicity
+
+def plot_mode_diagram_wrapper(dir_NM, option, paths_ref = None, cluster_tol = None, interactive = False, from_projection = False):
     '''
     Reads mode information files and plots angular order versus frequency.
 
@@ -324,18 +403,28 @@ def plot_mode_diagram_wrapper(dir_NM, option, paths_ref = None, cluster_tol = No
     dir_processed = os.path.join(dir_NM, 'processed')
     dir_plot = os.path.join(dir_processed, 'plots')
     mkdir_if_not_exist(dir_plot)
+    if from_projection:
+        option = 'projection'
     path_fig = os.path.join(dir_plot, 'mode_diagram_{:}.png'.format(option))
-
-    # Load the mode identification information.
-    path_ids = os.path.join(dir_processed, 'mode_ids_{:}.txt'.format(option))
-    i_mode, l, type_, shell = np.loadtxt(path_ids, dtype = np.int).T
 
     # Read the mode frequency. 
     file_eigval_list        = os.path.join(dir_processed, 'eigenvalue_list.txt')
     _, f = read_eigenvalues(file_eigval_list)
 
-    # Group the modes.
-    mode_info = mode_id_information_to_dict(type_, l, f, shell)
+    # Load the mode identification information.
+    path_ids = os.path.join(dir_processed, 'mode_ids_{:}.txt'.format(option))
+    if from_projection:
+
+        i_mode, n, l, type_ = np.loadtxt(path_ids, dtype = np.int).T
+        mode_info = proj_id_information_to_dict(i_mode, n, l, f, type_)
+    
+    else:
+
+        i_mode, l, type_, shell = np.loadtxt(path_ids, dtype = np.int).T
+
+        # Group the modes.
+        mode_info = mode_id_information_to_dict(type_, l, f, shell)
+
     #type_str_list = ['R', 'S', 'T']
     #n_modes = len(i_mode)
     #mode_info = dict()
@@ -393,7 +482,8 @@ def plot_mode_diagram_wrapper(dir_NM, option, paths_ref = None, cluster_tol = No
             path_fig = path_fig,
             nlf_ref = nlf_ref,
             cluster_tol = cluster_tol,
-            interactive = interactive)
+            interactive = interactive,
+            from_projection = from_projection)
 
     return
 
@@ -405,9 +495,11 @@ def main():
     metavar=('mode_type', 'path'), help = "Path to a file containing mode information (n, l, and frequency (mHz)) for the specified mode type (e.g. S) for a reference model, to add to the plot."),
     parser.add_argument('--cluster_tol', type = float)
     parser.add_argument('--interactive', action = 'store_true', help = "Include this flag to allow interaction with plot.")
+    parser.add_argument('--from_projection', action = 'store_true', help = "Include this flag to plot mode diagram from projection IDs.")
     input_args = parser.parse_args()
     cluster_tol = input_args.cluster_tol
     interactive = input_args.interactive
+    from_projection = input_args.from_projection
 
     # Parse reference paths.
     if input_args.ref_path is None:
@@ -430,7 +522,8 @@ def main():
     plot_mode_diagram_wrapper(dir_NM, option,
             paths_ref = paths_ref,
             cluster_tol = cluster_tol,
-            interactive = interactive)
+            interactive = interactive,
+            from_projection = from_projection)
 
 if __name__ == '__main__':
 

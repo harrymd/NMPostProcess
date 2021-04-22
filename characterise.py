@@ -6,13 +6,15 @@ Functions for characterising and identifying modes based on their vector spheric
 # Import modules. -------------------------------------------------------------
 
 # Import standard modules.
+import argparse
 import os
 
 # Import third-part modules.
 import numpy as np
 
 # Import local modules.
-from common import convert_complex_sh_to_real, get_list_of_modes_from_coeff_files, load_vsh_coefficients, make_l_and_m_lists, read_input_NMPostProcess
+from NMPostProcess.common import convert_complex_sh_to_real, get_list_of_modes_from_coeff_files, load_vsh_coefficients, make_l_and_m_lists, read_input_NMPostProcess
+from NMPostProcess.project_into_mode_basis import get_major_modes, load_1d_mode_info
 
 # Characterisation of modes based on their VSH coefficients. ------------------
 def calculate_power_distribution_quick_real(Ulm, Vlm, Wlm, l_list, print_ = True):
@@ -453,13 +455,62 @@ def characterise_all_modes_full(dir_NM):
 
     return
 
+def characterise_all_modes_projection(dir_NM, path_1d_input):
+
+    # Get 1-D mode information.
+    mode_info_1d, model_1d, run_info_1d = load_1d_mode_info(path_1d_input)
+
+    # Get a list of modes.
+    option = 'full'
+    i_mode_list = get_list_of_modes_from_coeff_files(dir_NM, option) 
+    num_modes = len(i_mode_list)
+
+    # Define directories.
+    dir_processed = os.path.join(dir_NM, 'processed')
+    dir_projections = os.path.join(dir_processed, 'projections')
+
+    # Find l-value and type for each mode.
+    n = np.zeros(num_modes, dtype = np.int)
+    l = np.zeros(num_modes, dtype = np.int)
+    type_ = np.zeros(num_modes, dtype = np.int)
+    amp_thresh = 0.2
+    type_str_to_int_dict = {'R' : 0, 'S' : 1, 'T0' : 2, 'T1' : 3}
+    for i in range(num_modes):
+
+        print('Mode: {:>5d}'.format(i_mode_list[i]))
+
+        n_i, l_i, f_i, amp_i, type_str_i = get_major_modes(
+                dir_projections, mode_info_1d, i_mode_list[i], amp_thresh)
+
+        n[i] = n_i[0]
+        l[i] = l_i[0]
+        #f[i] = f_i[0]
+        type_[i] = type_str_to_int_dict[type_str_i[0]]
+
+    path_out_ids = os.path.join(dir_NM, 'processed', 'mode_ids_projection.txt')
+    out_array_ids = np.array([i_mode_list, n, l, type_])
+    print('Saving mode identifications to {:}'.format(path_out_ids))
+    np.savetxt(path_out_ids, out_array_ids.T, fmt = '%i')
+
+    return
+
 # Main. -----------------------------------------------------------------------
 def main():
+
+    # Parse input arguments.
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--from_projection", metavar = 'path_input_1d') 
+    args = parser.parse_args()
+    path_1d_input  = args.from_projection
     
     # Read input file.
     dir_PM, dir_NM, option, l_max, i_mode_str, n_radii  = read_input_NMPostProcess()
 
-    if option == 'quick':
+    if path_1d_input is not None:
+
+        characterise_all_modes_projection(dir_NM, path_1d_input)
+        
+    elif option == 'quick':
 
         characterise_all_modes_quick(dir_NM)
 

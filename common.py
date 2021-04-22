@@ -279,10 +279,9 @@ def load_all_vsh_coefficients(dir_NM, i_mode_list, option = 'quick'):
 
     return coeffs
 
-def read_input_NMPostProcess():
+def read_input_NMPostProcess(input_file = 'input_NMPostProcess.txt'):
 
     # Read the input file.
-    input_file = 'input_NMPostProcess.txt'
     with open(input_file, 'r') as in_id:
 
         input_args = in_id.readlines()

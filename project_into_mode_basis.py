@@ -569,13 +569,276 @@ def interpolate_eigfunc(r_sample, i_sample, eigfunc_dict, mode_type, i_toroidal 
 
     return eigfunc_interpolated
 
+def get_max_amp(mode_info_3d):
+
+    # Find maximum excitation amplitude.
+    max_amp = 0.0
+    for mode_type in mode_info_3d.keys():
+        
+        if mode_info_3d[mode_type] is None:
+
+            continue
+
+        for multiplet in mode_info_3d[mode_type].keys():
+
+            amp_list = np.sqrt( mode_info_3d[mode_type][multiplet]['coeff_real']**2.0 + \
+                                mode_info_3d[mode_type][multiplet]['coeff_imag']**2.0)
+            max_amp_i = np.max(amp_list)
+            #print('{:} {:>15.3f}'.format(multiplet, 1.0E9*max_amp_i))
+            if max_amp_i > max_amp:
+
+                max_amp = max_amp_i
+
+    return max_amp
+
+def get_singlet_amplitude(mode_info_3d, max_amp):
+
+    singlet_amplitude = dict()
+
+    for mode_type in mode_info_3d.keys():
+
+        if mode_info_3d[mode_type] is None:
+
+            continue
+
+        for nl_key in mode_info_3d[mode_type].keys():
+
+            # Get string representing mode type, n and l.
+            type_nl_key = '{:}_{:}'.format(mode_type, nl_key)
+
+            # Unpack dictionary.
+            x_real = mode_info_3d[mode_type][nl_key]['coeff_real']
+            x_imag = mode_info_3d[mode_type][nl_key]['coeff_imag']
+
+            singlet_amplitude[type_nl_key] = \
+                np.sqrt(np.sum(x_real**2.0 + x_imag**2.0)) / max_amp
+
+    return singlet_amplitude
+
+def load_3d_mode_info(path_in):
+
+    # Dictionary for loading mode type saved as integer.
+    mode_type_from_int_dict = {0 : 'R', 1 : 'S', 2 : 'T1', 3 : 'T0'}
+
+    # Load data and extract columns.
+    data = np.loadtxt(path_in)
+    mode_type_int   = data[:, 0].astype(np.int)
+    n               = data[:, 1].astype(np.int)
+    l               = data[:, 2].astype(np.int)
+    m               = data[:, 3].astype(np.int)
+    coeff_real      = data[:, 4]
+    coeff_imag      = data[:, 5]
+
+    # Separate different mode types.
+    mode_info = dict()
+    mode_type_int_list = np.sort(np.unique(mode_type_int))
+    for mode_type_int_i in mode_type_int_list:
+
+        # Get mode type string.
+        mode_type = mode_type_from_int_dict[mode_type_int_i]
+        mode_info[mode_type] = dict()
+
+        # Find modes with the given mode type.
+        j = np.where(mode_type_int_i == mode_type_int)[0]
+        
+        # Store select modes in dictionary.
+        mode_info[mode_type]['n'] = n[j]
+        mode_info[mode_type]['l'] = l[j]
+        mode_info[mode_type]['m'] = m[j]
+        mode_info[mode_type]['coeff_real'] = coeff_real[j]
+        mode_info[mode_type]['coeff_imag'] = coeff_imag[j]
+
+    # Group modes into specific multiplets.
+    mode_info_grouped = dict()
+    for mode_type in mode_info.keys():
+
+        num_modes = len(mode_info[mode_type]['n'])
+
+        mode_info_grouped[mode_type] = dict()
+
+        for i in range(num_modes):
+
+            # Unpack dictionary.
+            n = mode_info[mode_type]['n'][i]
+            l = mode_info[mode_type]['l'][i]
+            #m = mode_info[mode_type]['m'][i]
+            #coeff_real = mode_info[mode_type][coeff_real][i]
+            #coeff_imag = mode_info[mode_type][coeff_imag][i]
+
+            # Get unique string identifying multiplet.
+            nl_key = '{:>05d}_{:>05d}'.format(n, l)
+
+            if nl_key in mode_info_grouped[mode_type].keys():
+                
+                for variable in ['m', 'coeff_real', 'coeff_imag']:
+
+                    mode_info_grouped[mode_type][nl_key][variable] = \
+                        np.append(mode_info_grouped[mode_type][nl_key][variable],
+                                    mode_info[mode_type][variable][i])
+
+            else:
+
+                mode_info_grouped[mode_type][nl_key] = dict()
+                mode_info_grouped[mode_type][nl_key]['n'] = n
+                mode_info_grouped[mode_type][nl_key]['l'] = l 
+
+                for variable in ['m', 'coeff_real', 'coeff_imag']:
+
+                    mode_info_grouped[mode_type][nl_key][variable] = \
+                            np.atleast_1d(mode_info[mode_type][variable][i])
+
+    # Sort the multiplets by m-value.
+    for mode_type in mode_info_grouped.keys():
+
+        for nl_key in mode_info_grouped[mode_type]:
+
+            i_sort = np.argsort(mode_info_grouped[mode_type][nl_key]['m'])
+            for variable in ['m', 'coeff_real', 'coeff_imag']:
+
+                mode_info_grouped[mode_type][nl_key][variable] = \
+                        mode_info_grouped[mode_type][nl_key][variable][i_sort]
+
+    # Fill in empty mode types.
+    for mode_type in ['R', 'S', 'T0', 'T1']:
+
+        if mode_type not in mode_info_grouped.keys():
+
+            mode_info_grouped[mode_type] = None
+
+    #return mode_info
+    return mode_info_grouped
+
+def report_wrapper(dir_processed, mode_info_1d, i_mode_list):
+    
+    path_report = os.path.join(dir_processed, 'projections', 'report.txt')
+    print("Writing to {:}".format(path_report))
+    with open(path_report, 'w') as out_id:
+
+        for i_mode in i_mode_list:
+
+            report_str = report(dir_processed, mode_info_1d, i_mode)
+
+            out_id.write(report_str + '\n')
+
+    return
+
+def report(dir_processed, mode_info_1d, i_mode, amp_thresh = 0.2):
+
+    # Find projections directory.
+    dir_projections = os.path.join(dir_processed, 'projections')
+
+    # Load major modes.
+    n_singlet, l_singlet, f_singlet, amp_singlet, mode_type_list = \
+        get_major_modes(dir_projections, mode_info_1d, i_mode, amp_thresh)
+    num_singlet = len(n_singlet)
+    
+    report_str = ''
+    for i in range(num_singlet):
+        
+        if i > 0:
+            
+            report_str_i = '{:>2} {:>3d} {:>3d} {:>7.3f}    '.format(mode_type_list[i], n_singlet[i],
+                    l_singlet[i], amp_singlet[i])
+
+        else:
+
+            report_str_i = '{:>5d} {:>2} {:>3d} {:>3d} {:>7.3f}    '.format(i_mode, mode_type_list[i], n_singlet[i],
+                    l_singlet[i], amp_singlet[i])
+        report_str = report_str + report_str_i
+
+    print(report_str)
+    
+    return report_str
+
+def get_major_modes(dir_projections, mode_info_1d, i_mode, amp_thresh):
+
+    # Get projection coefficients of 3-D modes.
+    file_projection = 'mode_{:>05d}.txt'.format(i_mode)
+    path_projection = os.path.join(dir_projections, file_projection)
+    mode_info_3d = load_3d_mode_info(path_projection)
+
+    # Get maximum amplitude.
+    max_amp = get_max_amp(mode_info_3d)
+
+    # Get the amplitude in each singlet.
+    singlet_amplitude = get_singlet_amplitude(mode_info_3d, max_amp)
+
+    # Count the number of singlets.
+    num_singlets = 0
+    for type_nl_key in singlet_amplitude.keys():
+        
+        num_singlets = num_singlets + 1
+
+    # Prepare plotting arrays.
+    mode_type_list = []
+    n_singlet   = np.zeros(num_singlets, dtype = np.int)
+    l_singlet   = np.zeros(num_singlets, dtype = np.int)
+    f_singlet   = np.zeros(num_singlets)
+    amp_singlet = np.zeros(num_singlets)
+
+    # Fill plotting arrays.
+    for i, type_nl_key in enumerate(singlet_amplitude.keys()):
+
+        mode_type, n_str, l_str = type_nl_key.split('_')
+        n_singlet[i] = int(n_str)
+        l_singlet[i] = int(l_str)
+
+        k = np.where((mode_info_1d[mode_type]['n'] == n_singlet[i]) &
+                     (mode_info_1d[mode_type]['l'] == l_singlet[i]))[0]
+        
+        f_singlet[i]   = mode_info_1d[mode_type]['f'][k]
+        amp_singlet[i] = singlet_amplitude[type_nl_key]
+
+        mode_type_list.append(mode_type)
+
+    # Normalise amplitude.
+    total_amp = np.sqrt(np.sum(amp_singlet**2.0))
+    amp_singlet = amp_singlet/total_amp
+
+    # Filter small amplitudes.
+    i_thresh = np.where(amp_singlet > amp_thresh)[0]
+    n_singlet   = n_singlet[i_thresh]
+    l_singlet   = l_singlet[i_thresh]
+    f_singlet   = f_singlet[i_thresh]
+    amp_singlet = amp_singlet[i_thresh]
+    mode_type_list = [mode_type_list[i] for i in i_thresh]
+
+    # Count filtered list.
+    num_singlet = len(l_singlet)
+
+    # Sort by amplitude.
+    i_sort = np.argsort(-amp_singlet)
+    n_singlet   = n_singlet[i_sort]
+    l_singlet   = l_singlet[i_sort]
+    f_singlet   = f_singlet[i_sort]
+    amp_singlet = amp_singlet[i_sort]
+    mode_type_list = [mode_type_list[i] for i in i_sort]
+
+    #i_sort = np.argsort(f_singlet)
+    #n_singlet   = n_singlet[i_sort]
+    #l_singlet   = l_singlet[i_sort]
+    #f_singlet   = f_singlet[i_sort]
+    #amp_singlet = amp_singlet[i_sort]
+    #mode_type_list = [mode_type_list[i] for i in i_sort]
+    ##
+    #i_sort = np.argsort(l_singlet)
+    #n_singlet   = n_singlet[i_sort]
+    #l_singlet   = l_singlet[i_sort]
+    #f_singlet   = f_singlet[i_sort]
+    #amp_singlet = amp_singlet[i_sort]
+    #mode_type_list = [mode_type_list[i] for i in i_sort]
+
+    return n_singlet, l_singlet, f_singlet, amp_singlet, mode_type_list
+
 def main():
 
     # Parse input arguments.
     parser = argparse.ArgumentParser()
     parser.add_argument("path_ref") 
+    parser.add_argument("--print_report", action = 'store_true', help = 'Run the command a second time using this flag to report the results of the projection.')
     args = parser.parse_args()
     path_1d_input = args.path_ref
+    print_report = args.print_report
 
     # Get 1-D mode information.
     mode_info_1d, model_1d, run_info_1d = load_1d_mode_info(path_1d_input)
@@ -595,23 +858,26 @@ def main():
     _, f_3D = read_eigenvalues(file_eigval_list)
 
     # Do projection for each mode.
-    first_iteration = True
-    for i_mode in i_mode_list:
-    #for i_mode in [1]:
-    #for i_mode in [423]:
-    #for i_mode in [876]:
-
-        print('Mode {:>5d}'.format(i_mode))
-
-        # Get the masses of the shells.
-        if first_iteration:
-
-            shell_mass = get_shell_mass_wrapper(dir_NM, model_1d)
-            shell_mass = shell_mass[::-1]
-            first_iteration = False
+    if print_report:
         
-        # Do the projection.
-        projection_wrapper_one_mode(dir_NM, i_mode, f_3D[i_mode - 1], mode_info_1d, run_info_1d, l_max, shell_mass)
+        report_wrapper(dir_processed, mode_info_1d, i_mode_list)
+
+    else:
+
+        first_iteration = True
+        for i_mode in i_mode_list:
+
+            print('Mode {:>5d}'.format(i_mode))
+
+            # Get the masses of the shells.
+            if first_iteration:
+
+                shell_mass = get_shell_mass_wrapper(dir_NM, model_1d)
+                shell_mass = shell_mass[::-1]
+                first_iteration = False
+            
+            # Do the projection.
+            projection_wrapper_one_mode(dir_NM, i_mode, f_3D[i_mode - 1], mode_info_1d, run_info_1d, l_max, shell_mass)
 
     return
 

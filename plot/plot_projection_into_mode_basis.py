@@ -12,100 +12,8 @@ import numpy as np
 
 from NMPostProcess.common import (get_list_of_modes_from_coeff_files,
                         read_eigenvalues, read_input_NMPostProcess)
-from NMPostProcess.project_into_mode_basis import load_1d_mode_info
-
-def load_3d_mode_info(path_in):
-
-    # Dictionary for loading mode type saved as integer.
-    mode_type_from_int_dict = {0 : 'R', 1 : 'S', 2 : 'T1', 3 : 'T0'}
-
-    # Load data and extract columns.
-    data = np.loadtxt(path_in)
-    mode_type_int   = data[:, 0].astype(np.int)
-    n               = data[:, 1].astype(np.int)
-    l               = data[:, 2].astype(np.int)
-    m               = data[:, 3].astype(np.int)
-    coeff_real      = data[:, 4]
-    coeff_imag      = data[:, 5]
-
-    # Separate different mode types.
-    mode_info = dict()
-    mode_type_int_list = np.sort(np.unique(mode_type_int))
-    for mode_type_int_i in mode_type_int_list:
-
-        # Get mode type string.
-        mode_type = mode_type_from_int_dict[mode_type_int_i]
-        mode_info[mode_type] = dict()
-
-        # Find modes with the given mode type.
-        j = np.where(mode_type_int_i == mode_type_int)[0]
-        
-        # Store select modes in dictionary.
-        mode_info[mode_type]['n'] = n[j]
-        mode_info[mode_type]['l'] = l[j]
-        mode_info[mode_type]['m'] = m[j]
-        mode_info[mode_type]['coeff_real'] = coeff_real[j]
-        mode_info[mode_type]['coeff_imag'] = coeff_imag[j]
-
-    # Group modes into specific multiplets.
-    mode_info_grouped = dict()
-    for mode_type in mode_info.keys():
-
-        num_modes = len(mode_info[mode_type]['n'])
-
-        mode_info_grouped[mode_type] = dict()
-
-        for i in range(num_modes):
-
-            # Unpack dictionary.
-            n = mode_info[mode_type]['n'][i]
-            l = mode_info[mode_type]['l'][i]
-            #m = mode_info[mode_type]['m'][i]
-            #coeff_real = mode_info[mode_type][coeff_real][i]
-            #coeff_imag = mode_info[mode_type][coeff_imag][i]
-
-            # Get unique string identifying multiplet.
-            nl_key = '{:>05d}_{:>05d}'.format(n, l)
-
-            if nl_key in mode_info_grouped[mode_type].keys():
-                
-                for variable in ['m', 'coeff_real', 'coeff_imag']:
-
-                    mode_info_grouped[mode_type][nl_key][variable] = \
-                        np.append(mode_info_grouped[mode_type][nl_key][variable],
-                                    mode_info[mode_type][variable][i])
-
-            else:
-
-                mode_info_grouped[mode_type][nl_key] = dict()
-                mode_info_grouped[mode_type][nl_key]['n'] = n
-                mode_info_grouped[mode_type][nl_key]['l'] = l 
-
-                for variable in ['m', 'coeff_real', 'coeff_imag']:
-
-                    mode_info_grouped[mode_type][nl_key][variable] = \
-                            np.atleast_1d(mode_info[mode_type][variable][i])
-
-    # Sort the multiplets by m-value.
-    for mode_type in mode_info_grouped.keys():
-
-        for nl_key in mode_info_grouped[mode_type]:
-
-            i_sort = np.argsort(mode_info_grouped[mode_type][nl_key]['m'])
-            for variable in ['m', 'coeff_real', 'coeff_imag']:
-
-                mode_info_grouped[mode_type][nl_key][variable] = \
-                        mode_info_grouped[mode_type][nl_key][variable][i_sort]
-
-    # Fill in empty mode types.
-    for mode_type in ['R', 'S', 'T0', 'T1']:
-
-        if mode_type not in mode_info_grouped.keys():
-
-            mode_info_grouped[mode_type] = None
-
-    #return mode_info
-    return mode_info_grouped
+from NMPostProcess.project_into_mode_basis import (get_max_amp, load_1d_mode_info,
+                        load_3d_mode_info, get_singlet_amplitude)
 
 def get_max_l(mode_info, f_lims):
 
@@ -414,28 +322,6 @@ def plot_excitation(ax, mode_info_1d, mode_info_3d, max_amp, multiplet_offset_di
 
     return
 
-def get_max_amp(mode_info_3d):
-
-    # Find maximum excitation amplitude.
-    max_amp = 0.0
-    for mode_type in mode_info_3d.keys():
-        
-        if mode_info_3d[mode_type] is None:
-
-            continue
-
-        for multiplet in mode_info_3d[mode_type].keys():
-
-            amp_list = np.sqrt( mode_info_3d[mode_type][multiplet]['coeff_real']**2.0 + \
-                                mode_info_3d[mode_type][multiplet]['coeff_imag']**2.0)
-            max_amp_i = np.max(amp_list)
-            #print('{:} {:>15.3f}'.format(multiplet, 1.0E9*max_amp_i))
-            if max_amp_i > max_amp:
-
-                max_amp = max_amp_i
-
-    return max_amp
-
 def make_sub_ax_grid(sub_ax, l):
     
     if l > 0:
@@ -611,6 +497,247 @@ def plot_projection_wrapper(dir_projections, dir_plots, mode_info_1d, f_3d, i_mo
 
     return
 
+def plot_link_diagram_wrapper(dir_projections, dir_plots, mode_info_1d, f_3d, i_mode_list, show = True, path_link_list = None):
+
+    # Define axis frequency limits.
+    f_min_3d = np.min(f_3d)
+    f_max_3d = np.max(f_3d)
+    f_range = f_max_3d - f_min_3d
+    #y_buff = 0.05
+    #f_lim_min = f_min_3d + y_buff*f_range
+    #f_lim_max = f_max_3d + y_buff*f_range
+    f_buff = 0.25
+    f_lim_min = f_min_3d - f_buff
+    f_lim_max = f_max_3d + f_buff
+    f_lims = [f_lim_min, f_lim_max]
+
+    # Define axis angular order limits.
+    l_lim_max = get_max_l(mode_info_1d, f_lims)
+    x_buff = 0.05
+    #x_buff = 0.6
+    l_lims = [-0.5, (1.0 + x_buff)*l_lim_max]
+
+    # Create mapping between 1-D mode type and axis.
+    #mode_type_to_axis = {'R' : 0, 'S' : 0, 'T1' : 1, 'T0' : 2}
+    mode_type_to_axis = {'R' : 0, 'S' : 0, 'T1' : 1, 'T0' : 1}
+
+    # Create color key for different mode types.
+    color_R = 'slateblue'
+    color_S = color_R
+    color_T0 = 'orangered'
+    color_T1 = 'forestgreen'
+    mode_color_dict = { 'R' : color_R, 'S' : color_S,
+            'T1' : color_T1, 'T0': color_T0}
+    
+    # Create figure.
+    fig = plt.figure(figsize = (14.0, 11.0), constrained_layout = True)
+    ax  = plt.gca()
+
+    # Set axis limits.
+    ax.set_xlim(l_lims)
+    ax.set_ylim(f_lims)
+
+    # Draw frequency of specific mode.
+    if len(i_mode_list) == 1:
+
+        ax.axhline(f_3d[i_mode_list[0] - 1], color = 'k', linestyle = ':')
+
+    # Plot underlying mode diagram.
+    for mode_type in mode_info_1d.keys():
+
+        # Get color.
+        color = mode_color_dict[mode_type]
+        
+        # Plot. 
+        plot_dispersion(ax, mode_type, mode_info_1d[mode_type], color = color)
+    
+    if len(i_mode_list) == 1:
+
+        alpha = 1.0
+
+    else:
+        
+        alpha = 0.2
+        #alpha = 1.0 / len(i_mode_list)
+        #min_alpha = (1.0/256.0) # PyPlot can't handle small values of alpha
+        #                        # for certain backends.
+        min_alpha = 0.01 # Small alpha values are also hard to see.
+        if alpha < min_alpha:
+            alpha = min_alpha
+
+    # Load link list.
+    if path_link_list is not None:
+
+        link_list = load_link_list(path_link_list)
+
+    for i_mode in i_mode_list:
+
+        # Get projection coefficients of 3-D modes.
+        file_projection = 'mode_{:>05d}.txt'.format(i_mode)
+        path_projection = os.path.join(dir_projections, file_projection)
+        mode_info_3d = load_3d_mode_info(path_projection)
+
+        # Get maximum amplitude.
+        max_amp = get_max_amp(mode_info_3d)
+
+        # Get the amplitude in each singlet.
+        singlet_amplitude = get_singlet_amplitude(mode_info_3d, max_amp)
+
+        if path_link_list is not None:
+            
+            mode_is_linked = check_if_mode_is_linked(singlet_amplitude, link_list)
+            if mode_is_linked:
+
+                plot_link_diagram(ax, mode_info_1d, singlet_amplitude, alpha = alpha)
+
+        else:
+
+            # Plot links.
+            plot_link_diagram(ax, mode_info_1d, singlet_amplitude, alpha = alpha)
+
+    # Label axes.
+    font_size_label = 13
+    ax.set_ylabel("Frequency (mHz)", fontsize = font_size_label)
+    ax.set_xlabel("Angular order, $\ell$", fontsize = font_size_label)
+
+    # Save.
+    if len(i_mode_list) == 1:
+
+        name_out = 'link_diagram_{:>05d}.png'.format(i_mode)
+
+    else:
+
+        name_out = 'link_diagram_{:>05d}_to_{:>05d}.png'.format(i_mode_list[0], i_mode_list[-1])
+    path_out = os.path.join(dir_plots, name_out)
+    print('Saving to {:}'.format(path_out))
+    plt.savefig(path_out, dpi = 300)
+
+    # Show.
+    if show:
+
+        plt.show()
+
+    # Close.
+    plt.close()
+
+    return
+
+def plot_link_diagram(ax, mode_info_1d, singlet_amplitude, alpha = 1.0):
+
+    # Count the number of singlets.
+    num_singlets = 0
+    for type_nl_key in singlet_amplitude.keys():
+        
+        num_singlets = num_singlets + 1
+
+    # Prepare plotting arrays.
+    mode_type_list = []
+    n_singlet   = np.zeros(num_singlets, dtype = np.int)
+    l_singlet   = np.zeros(num_singlets, dtype = np.int)
+    f_singlet   = np.zeros(num_singlets)
+    amp_singlet = np.zeros(num_singlets)
+
+    # Fill plotting arrays.
+    for i, type_nl_key in enumerate(singlet_amplitude.keys()):
+
+        mode_type, n_str, l_str = type_nl_key.split('_')
+        n_singlet[i] = int(n_str)
+        l_singlet[i] = int(l_str)
+
+        k = np.where((mode_info_1d[mode_type]['n'] == n_singlet[i]) &
+                     (mode_info_1d[mode_type]['l'] == l_singlet[i]))[0]
+        
+        f_singlet[i]   = mode_info_1d[mode_type]['f'][k]
+        amp_singlet[i] = singlet_amplitude[type_nl_key]
+
+        mode_type_list.append(mode_type)
+
+        #print(type_nl_key, n_singlet[i], l_singlet[i], f_singlet[i], amp_singlet[i])
+
+    # Filter small amplitudes.
+    #amp_thresh = 0.1
+    amp_thresh = 0.3
+    i_thresh = np.where(amp_singlet > amp_thresh)[0]
+    n_singlet   = n_singlet[i_thresh]
+    l_singlet   = l_singlet[i_thresh]
+    f_singlet   = f_singlet[i_thresh]
+    amp_singlet = amp_singlet[i_thresh]
+    mode_type_list = [mode_type_list[i] for i in i_thresh]
+
+    # Count filtered list.
+    num_singlet = len(l_singlet)
+
+    # Sort by frequency, then by l-value.
+    i_sort = np.argsort(f_singlet)
+    n_singlet   = n_singlet[i_sort]
+    l_singlet   = l_singlet[i_sort]
+    f_singlet   = f_singlet[i_sort]
+    amp_singlet = amp_singlet[i_sort]
+    mode_type_list = [mode_type_list[i] for i in i_sort]
+    #
+    i_sort = np.argsort(l_singlet)
+    n_singlet   = n_singlet[i_sort]
+    l_singlet   = l_singlet[i_sort]
+    f_singlet   = f_singlet[i_sort]
+    amp_singlet = amp_singlet[i_sort]
+    mode_type_list = [mode_type_list[i] for i in i_sort]
+
+    for i in range(num_singlet):
+        print('{:>2} {:>3d} {:>3d}'.format(mode_type_list[i], n_singlet[i],
+                l_singlet[i]), end = ' ')
+    print('\n', end = '')
+    
+    # Get size of markers.
+    s_max = 50.0
+    max_amp_singlet = np.max(amp_singlet)
+    s = s_max * (amp_singlet/max_amp_singlet)
+    
+    # Scatter plot.
+    ax.scatter(l_singlet, f_singlet, s = s, c = 'k', zorder = 20, alpha = alpha)
+
+    # Line plot.
+    if num_singlet > 1:
+
+        ax.plot(l_singlet, f_singlet, c = 'k', alpha = alpha)
+
+    return
+
+def load_link_list(path_link_list):
+    
+    link_list = []
+    with open(path_link_list, 'r') as in_id:
+
+        for line in in_id.readlines():
+            
+            mode_type, n_str, l_str = line.split()
+            n = int(n_str)
+            l = int(l_str)
+            mode_type_nl_tag = '{:}_{:>05d}_{:05d}'.format(mode_type, n, l)
+
+            link_list.append(mode_type_nl_tag)
+
+    return link_list
+
+def check_if_mode_is_linked(singlet_amplitude, link_list, thresh = 0.1):
+
+    amp_of_link_list = []
+    for mode in link_list:
+
+        if mode in singlet_amplitude.keys():
+
+            amp_of_link_list.append(singlet_amplitude[mode])
+
+        else:
+
+            amp_of_link_list.append(0.0)
+    
+    above_thresh = [(amp > thresh) for amp in amp_of_link_list]
+    if any(above_thresh):
+
+        return True
+
+    return False
+
 def main():
 
     # Parse input arguments.
@@ -618,9 +745,13 @@ def main():
     parser.add_argument("path_ref", help = 'Path to input file used to calculate 1-D reference model.') 
     parser.add_argument("i_mode", help = 'Integer ID of 3-D mode to plot, or \'all\'.') 
     parser.add_argument("--link_diagram", action = 'store_true', help = "Include this flag to plot a diagram of linked singlets instead of coefficient highlights.")
+    parser.add_argument("--link_overlay", action = 'store_true', help = "Include this flag along with --link_diagram to plot all links on a single diagram.")
+    parser.add_argument("--path_link_list", help = "Include this flag along with --link_diagram and --link_overlay to plot all links of the modes specified in path_link_list on a single diagram.")
     args = parser.parse_args()
     path_1d_input = args.path_ref
     link_diagram = args.link_diagram
+    link_overlay = args.link_overlay
+    path_link_list = args.path_link_list
     i_mode = args.i_mode
 
     # Load 1-D mode information.
@@ -646,21 +777,36 @@ def main():
         
         show = False
 
+    elif ',' in i_mode:
+
+        i_mode_0_str, i_mode_1_str = i_mode.split(',')
+        i_mode_0 = int(i_mode_0_str)
+        i_mode_1 = int(i_mode_1_str)
+        i_mode_list = list(range(i_mode_0, i_mode_1 + 1))
+        show = False
+
     else:
 
         i_mode_list = [int(i_mode)]
         show = True
 
-    for i_mode in i_mode_list:
+    if link_diagram:
 
-        if link_diagram:
+        if link_overlay:
 
-            plot_link_diagram(dir_projections, dir_plots, mode_info_1d,
-                    f_3d, i_mode, show = show)
+            plot_link_diagram_wrapper(dir_projections, dir_plots, mode_info_1d,
+                    f_3d, i_mode_list, show = show, path_link_list = path_link_list)
 
         else:
 
-            plot_projection_wrapper(dir_projections, dir_plots, mode_info_1d,
+            for i_mode in i_mode_list:
+
+                plot_link_diagram_wrapper(dir_projections, dir_plots, mode_info_1d,
+                        f_3d, [i_mode], show = show)
+
+    else:
+
+        plot_projection_wrapper(dir_projections, dir_plots, mode_info_1d,
                     f_3d, i_mode, show = show)
 
     return

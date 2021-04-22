@@ -93,8 +93,10 @@ def get_radial_profiles_complex(coeffs):
 
     # Use SVD to extract first principal component.
     # Note: It is automatically normalised.
-    _, _, PCs = np.linalg.svd(Xlm)
-    first_PC = PCs[0, :]
+    _, sing_vals, PCs = np.linalg.svd(Xlm)
+    first_PC = PCs[1, :]
+
+    print(sing_vals[0 : 5])
 
     ## Note: Already normalised.
     #norm_first_PC = np.sqrt(np.sum(first_PC * np.conj(first_PC)))
