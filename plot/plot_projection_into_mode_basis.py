@@ -805,9 +805,11 @@ def main():
                         f_3d, [i_mode], show = show)
 
     else:
+        
+        for i_mode in i_mode_list:
 
-        plot_projection_wrapper(dir_projections, dir_plots, mode_info_1d,
-                    f_3d, i_mode, show = show)
+            plot_projection_wrapper(dir_projections, dir_plots, mode_info_1d,
+                        f_3d, i_mode, show = show)
 
     return
 

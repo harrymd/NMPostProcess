@@ -162,7 +162,14 @@ import shtns
 import ssrfpy
 
 # Import local modules.
-from common import get_list_of_modes_from_output_files, mkdir_if_not_exist, read_discon_file, read_eigenvalues, read_input_NMPostProcess, RLonLatEll_to_XYZ, XYZ_to_REll, LegendrePoly2
+from NMPostProcess.common import (get_list_of_modes_from_output_files,
+        mkdir_if_not_exist, read_discon_file, read_eigenvalues,
+        read_input_NMPostProcess, RLonLatEll_to_XYZ, XYZ_to_REll,
+        LegendrePoly2)
+from NMPostProcess.legacy import pre_process_legacy
+    
+# Set this to True to load grids in old format.
+legacy = True
 
 # Pre-processing steps (only performed once for a given run). -----------------
 def write_eigenvalues_from_std_out_file(path_std_out, path_eigval_list = None): 
@@ -1908,8 +1915,10 @@ def vsh_projection_full(dir_NM, l_max, eigvec_path_base, nodes, node_idxs, node_
     else:
 
         num_coeffs_per_slice = 6
+    
+    # Note complex dtype regardless of whether input field is real or complex.
+    coeffs = np.zeros((n_radii, num_coeffs_per_slice, n_coeffs), dtype = np.complex)
 
-    coeffs = np.zeros((n_radii, 6, n_coeffs), dtype = np.complex)
     #
     for i in range(n_radii):
 
@@ -2084,7 +2093,13 @@ def main():
         ellipticity_profile = None
 
     # Do pre-processing steps.
-    pre_process(dir_PM, dir_NM, ellipticity_profile = ellipticity_profile)
+    if legacy:
+
+        pre_process_legacy(dir_PM, dir_NM)
+    
+    else:
+
+        pre_process(dir_PM, dir_NM, ellipticity_profile = ellipticity_profile)
     eigvec_path_base = get_eigvec_path_base(dir_NM)
 
     # Quick projection (one radius only).
