@@ -36,6 +36,101 @@ def mkdir_if_not_exist(dir_):
     return
 
 # Read files.
+def load_sample_indices_and_attribs(dir_NM):
+    '''
+    Read the *_vlist.dat and *_vstat.dat files, and slightly reformat them to help to distinguish between samples on the inner and outer surfaces of discontinuities.
+
+    Input:
+
+    dir_NM
+        See 'Definitions of variables'.
+
+    Output:
+
+    node_idxs, node_attbs
+        See 'Definitions of variables'.
+    '''
+    
+    # Read the vlist file (a list of vertex indices).
+    path_vlist_regex = os.path.join(dir_NM, '*_vlist.dat')
+    path_vlist_glob = glob(path_vlist_regex)
+    path_vlist = path_vlist_glob[0]
+    node_idxs   = np.fromfile(path_vlist, dtype = '<i')
+    # Convert to 0-based indexing.
+    node_idxs   = node_idxs - 1
+    
+    # Read the vstat file (a list of vertex attributes).
+    path_vstat_regex = os.path.join(dir_NM, '*_vstat.dat')
+    path_vstat = glob(path_vstat_regex)[0]
+    node_attbs  = np.fromfile(path_vstat, dtype = '<i')
+
+    # Print a vertex attribute summary.
+    unique_node_attbs = np.unique(node_attbs)
+    n_nodes_by_attb = [np.sum(node_attbs == i) for i in unique_node_attbs]
+    print('Vertex attribute summary:')
+    for i in unique_node_attbs:
+
+        print('{:2d} {:6d}'.format(i, n_nodes_by_attb[i]))
+
+    # Calculate the number of nodes and the number of samples.
+    # (See 'Definitions of variables' for an explanation.)
+    n_nodes = node_idxs.shape[0]
+    n_samples = 0
+    for j, attb in enumerate(unique_node_attbs):
+
+        if (attb == 2) or (attb == 5):
+
+            n_samples = n_samples + 2*n_nodes_by_attb[j]
+
+        else:
+
+            n_samples = n_samples + n_nodes_by_attb[j]
+
+    # Insert a new vertex attribute for the each of the fluid-solid boundary
+    # nodes, so we can distinguish between the eigenvector on the fluid side
+    # and the solid side.
+    node_attbs_new  = np.zeros(n_samples, dtype = node_attbs.dtype)
+    node_idxs_new   = np.zeros(n_samples, dtype = node_idxs.dtype)
+    j = 0
+    for i in range(n_nodes):
+
+        # For interior and free-surface nodes, the indexing does not need to be
+        # changed.
+        node_attbs_new[j]   = node_attbs[i]
+        node_idxs_new[j]    = node_idxs[i]
+        
+        # A vertex attribute of 2 or 5 indicates a fluid-solid boundary node.
+        # (2 is first-order, 5 is second-order.)
+        if (node_attbs[i] == 2) or (node_attbs[i] == 5):
+
+            j = j + 1
+
+            # Repeat the node index (displacement is specified twice at this
+            # node).
+            node_idxs_new[j]    = node_idxs[i]
+            
+            # For the repeated node, set a new attribute to indicate it is on
+            # the liquid side of the boundary.
+            if node_attbs[i] == 2:
+
+                node_attbs_new[j] = 6
+
+            elif node_attbs[i] == 5:
+
+                node_attbs_new[j] = 7
+
+        j = j + 1
+        
+    node_idxs   = node_idxs_new
+    node_attbs  = node_attbs_new
+
+    # Discard information about second-order nodes.
+    i_first_order   = np.where((node_attbs == 0) | (node_attbs == 1) | (node_attbs == 2) | (node_attbs == 6))[0]
+    node_idxs   = node_idxs[i_first_order]
+    node_attbs  = node_attbs[i_first_order]
+
+    return node_idxs, node_attbs, i_first_order
+
 def read_discon_file(path_discon_info):
     '''
     Reads information about solid-fluid discontinuities.
